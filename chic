@@ -1,0 +1,114 @@
+#!/bin/bash -eu
+
+set +u
+ami="$CHIC_AMI"
+ami_name="$CHIC_AMI_NAME"
+profile="$CHIC_PROFILE"
+region="$CHIC_REGION"
+subnet_id="$CHIC_SUBNET_ID"
+set -u
+
+tags=
+quiet=0
+
+while getopts ":f:i:n:t:p:r:s:dq" opt; do
+	case $opt in
+    	f)
+	      	set -a # So all variables set are exported for our template engine
+			source "$OPTARG"
+			set +a
+	      	;;
+	    i)
+			ami="$OPTARG"
+			;;
+	    n)
+			ami_name="$OPTARG"
+			;;
+		t)
+			tag_key=$(echo "$OPTARG" | cut -d = -f 1)
+			tag_value=$(echo "$OPTARG" | cut -d = -f 2)
+			tags="${tags:-} Key=$tag_key,Value=$tag_value"
+			;;
+		p)
+			profile="$OPTARG"
+			;;
+		r)
+			region="$OPTARG"
+			;;
+		s)
+			subnet_id="$OPTARG"
+			;;
+	    d)
+			additional_aws_options="${additional_aws_options:-} --dry-run"
+			;;
+		q)
+			quiet=1
+			;;
+    	\?)
+	      	echo "Invalid option: -$OPTARG" >&2
+	      	;;
+	esac
+done
+
+shift $((OPTIND-1))
+
+if [ -z "${ami:-}" ]; then
+	echo "ami is required, either via -i command-line option or CHIC_AMI environment variable" >&2
+	exit 1
+fi
+
+# https://github.com/tests-always-included/mo
+mo=$(dirname $0)/lib/mo/mo
+
+custom_bootstrap=$(for bootstrap_file in $* ; do
+	"$mo" "$bootstrap_file"
+done)
+
+global_aws_options=
+if [ ! -z "${profile:-}" ]; then
+	global_aws_options="$global_aws_options --profile $profile"
+fi
+if [ ! -z "${region:-}" ]; then
+	global_aws_options="$global_aws_options --region $region"
+fi
+
+aws_access_key_id=$(aws configure get aws_access_key_id $global_aws_options)
+aws_secret_access_key=$(aws configure get aws_secret_access_key $global_aws_options)
+if [ -z "${region:-}" ]; then
+	region=$(aws configure get region $global_aws_options)
+fi
+
+bootstrap_template=$(dirname $0)/share/bootstrap.sh
+bootstrap=$(BOOTSTRAP_SCRIPT="$custom_bootstrap" \
+	BOOTSTRAP_AWS_ACCESS_KEY_ID="$aws_access_key_id" \
+	BOOTSTRAP_AWS_SECRET_ACCESS_KEY="$aws_secret_access_key" \
+	BOOTSTRAP_AWS_REGION="$region" \
+	"$mo" "$bootstrap_template")
+
+if [ -z "${subnet_id:-}" ]; then
+	subnets=$(aws ec2 describe-subnets $global_aws_options --query Subnets[].SubnetId --output text)
+	for i in $subnets ; do
+		subnet_id="$i"
+		echo "Choosing subnet-id: $subnet_id" >&2
+		break
+	done
+fi
+
+additional_aws_options=
+run_options="--instance-type t2.micro --subnet-id $subnet_id"
+
+instance_id=$(aws ec2 run-instances $additional_aws_options $global_aws_options --image-id "$ami" \
+	--count "1" $run_options \
+	--user-data "$bootstrap" \
+	--query "Instances[].InstanceId" --output text)
+
+new_ami_id=$(aws ec2 describe-images $additional_aws_options $global_aws_options --owners self --filters Name=name,Values="chic-$instance_id" --query Images[].ImageId --output text)
+while [ -z "$new_ami_id" ]; do
+	echo "Waiting for ami to appear..." >&2
+	sleep 5
+	new_ami_id=$(aws ec2 describe-images $additional_aws_options $global_aws_options --owners self --filters Name=name,Values="chic-$instance_id" --query Images[].ImageId --output text)
+done
+
+echo "$new_ami_id"
+
+terminated_instance_id=$(aws ec2 terminate-instances $additional_aws_options $global_aws_options --instance-ids "$instance_id" --query TerminatingInstances[].InstanceId --output text)
