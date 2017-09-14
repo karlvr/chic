@@ -41,7 +41,7 @@ while getopts ":f:a:i:n:t:p:r:s:dq" opt; do
 		t)
 			tag_key=$(echo "$OPTARG" | cut -d = -f 1)
 			tag_value=$(echo "$OPTARG" | cut -d = -f 2)
-			tags="${tags:-} Key=$tag_key,Value=$tag_value"
+			tags="${tags:-} Key=$tag_key,Value=\"$tag_value\""
 			;;
 		p)
 			profile="$OPTARG"
@@ -65,7 +65,7 @@ while getopts ":f:a:i:n:t:p:r:s:dq" opt; do
 done
 
 if [ ! -z "$name" ]; then
-	tags="${tags:-} Key=Name,Value=$name"
+	tags="${tags:-} Key=Name,Value=\"$name\""
 fi
 
 shift $((OPTIND-1))
@@ -144,7 +144,7 @@ ctrl_c() {
 	exit 1
 }
 
-aws ec2 create-tags --profile "$profile" --region "$region" --resources $instance_id --tags Key=Name,Value=chic-builder-$name
+aws ec2 create-tags --profile "$profile" --region "$region" --resources $instance_id --tags Key=Name,Value="chic-builder-$name"
 
 find_ami() {
 	new_ami_id=$(aws ec2 describe-images $additional_aws_options $global_aws_options --owners self --filters Name=name,Values="chic-$instance_id" --query Images[].ImageId --output text)
@@ -157,11 +157,11 @@ while [ -z "$new_ami_id" ]; do
 	find_ami
 done
 
+terminate
+
 # Add tags
 if [ ! -z "$tags" ]; then
 	aws ec2 create-tags --profile "$profile" --region "$region" --resources $new_ami_id --tags $tags
 fi
-
-terminate
 
 echo "$new_ami_id"
