@@ -13,9 +13,10 @@ tags=
 quiet=0
 
 usage() {
-	echo "usage: $0 [-f] [-a <base ami>] [-i <instance type>]"
+	echo "usage: $0 [-a <base ami>] [-i <instance type>]"
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+"
 	echo "          [-p <profile>] [-r <region>] [-s <subnet>]"
+	echo "          [-f <config file>]"
 	echo "          [-d] [-q] <bootstrap script> ..."
 	echo
 	echo " -d Dry run"
