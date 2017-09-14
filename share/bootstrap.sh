@@ -4,7 +4,7 @@
 
 ###############################################################################
 # Bootstrap
-# Run the bootstrap script
+# Run the custom bootstrap script
 
 set +eu
 {{BOOTSTRAP_SCRIPT}}
@@ -12,7 +12,7 @@ set -eu
 
 ###############################################################################
 # Image
-apt-get install -y awscli
+apt-get update && apt-get install -y awscli
 
 export AWS_ACCESS_KEY_ID={{BOOTSTRAP_AWS_ACCESS_KEY_ID}}
 export AWS_SECRET_ACCESS_KEY={{BOOTSTRAP_AWS_SECRET_ACCESS_KEY}}

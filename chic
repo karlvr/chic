@@ -2,7 +2,8 @@
 
 set +u
 ami="$CHIC_AMI"
-ami_name="$CHIC_AMI_NAME"
+instance_type=${CHIC_INSTANCE_TYPE:-t2.micro}
+name="$CHIC_AMI_NAME"
 profile="$CHIC_PROFILE"
 region="$CHIC_REGION"
 subnet_id="$CHIC_SUBNET_ID"
@@ -11,18 +12,31 @@ set -u
 tags=
 quiet=0
 
-while getopts ":f:i:n:t:p:r:s:dq" opt; do
+usage() {
+	echo "usage: $0 [-f] [-a <base ami>] [-i <instance type>]"
+	echo "          [-n <output ami name>] [-t <tag key>=<value>]+"
+	echo "          [-p <profile>] [-r <region>] [-s <subnet>]"
+	echo "          [-d] [-q] <bootstrap script> ..."
+	echo
+	echo " -d Dry run"
+	echo " -q Quiet"
+}
+
+while getopts ":f:a:i:n:t:p:r:s:dq" opt; do
 	case $opt in
     	f)
-	      	set -a # So all variables set are exported for our template engine
+			set -a # So all variables set are exported for our template engine
 			source "$OPTARG"
 			set +a
 	      	;;
-	    i)
+	    a)
 			ami="$OPTARG"
 			;;
+		i)
+			instance_type="$OPTARG"
+			;;
 	    n)
-			ami_name="$OPTARG"
+			name="$OPTARG"
 			;;
 		t)
 			tag_key=$(echo "$OPTARG" | cut -d = -f 1)
@@ -50,12 +64,11 @@ while getopts ":f:i:n:t:p:r:s:dq" opt; do
 	esac
 done
 
-shift $((OPTIND-1))
-
-if [ -z "${ami:-}" ]; then
-	echo "ami is required, either via -i command-line option or CHIC_AMI environment variable" >&2
-	exit 1
+if [ ! -z "$name" ]; then
+	tags="${tags:-} Key=Name,Value=$name"
 fi
+
+shift $((OPTIND-1))
 
 # https://github.com/tests-always-included/mo
 mo=$(dirname $0)/lib/mo/mo
@@ -64,6 +77,7 @@ custom_bootstrap=$(for bootstrap_file in $* ; do
 	"$mo" "$bootstrap_file"
 done)
 
+# AWS configuration
 global_aws_options=
 if [ ! -z "${profile:-}" ]; then
 	global_aws_options="$global_aws_options --profile $profile"
@@ -75,7 +89,22 @@ fi
 aws_access_key_id=$(aws configure get aws_access_key_id $global_aws_options)
 aws_secret_access_key=$(aws configure get aws_secret_access_key $global_aws_options)
 if [ -z "${region:-}" ]; then
+	set +e
 	region=$(aws configure get region $global_aws_options)
+	if [ $? != 0 ]; then
+		echo "Failed to determine AWS region. Please specify the region using the -r command-line option" >&2
+		echo "or the CHIC_REGION environment variable" >&2
+		exit 1
+	fi
+	set -e
+fi
+
+# AMI
+if [ -z "${ami:-}" ]; then
+	usage
+	echo
+	echo "AMI is required, either via -i command-line option or the CHIC_AMI environment variable" >&2
+	exit 1
 fi
 
 bootstrap_template=$(dirname $0)/share/bootstrap.sh
@@ -89,26 +118,50 @@ if [ -z "${subnet_id:-}" ]; then
 	subnets=$(aws ec2 describe-subnets $global_aws_options --query Subnets[].SubnetId --output text)
 	for i in $subnets ; do
 		subnet_id="$i"
-		echo "Choosing subnet-id: $subnet_id" >&2
+		echo "* Choosing subnet-id: $subnet_id" >&2
 		break
 	done
 fi
 
 additional_aws_options=
-run_options="--instance-type t2.micro --subnet-id $subnet_id"
+run_options="--instance-type $instance_type --subnet-id $subnet_id"
 
 instance_id=$(aws ec2 run-instances $additional_aws_options $global_aws_options --image-id "$ami" \
 	--count "1" $run_options \
 	--user-data "$bootstrap" \
 	--query "Instances[].InstanceId" --output text)
 
-new_ami_id=$(aws ec2 describe-images $additional_aws_options $global_aws_options --owners self --filters Name=name,Values="chic-$instance_id" --query Images[].ImageId --output text)
-while [ -z "$new_ami_id" ]; do
-	echo "Waiting for ami to appear..." >&2
-	sleep 5
+terminate() {
+	echo "* Terminating builder instance..." >&2
+	terminated_instance_id=$(aws ec2 terminate-instances $additional_aws_options $global_aws_options --instance-ids "$instance_id" --query TerminatingInstances[].InstanceId --output text)
+}
+
+trap ctrl_c INT
+
+ctrl_c() {
+	echo "* Cancelling" >&2
+	terminate
+	exit 1
+}
+
+aws ec2 create-tags --profile "$profile" --region "$region" --resources $instance_id --tags Key=Name,Value=chic-builder-$name
+
+find_ami() {
 	new_ami_id=$(aws ec2 describe-images $additional_aws_options $global_aws_options --owners self --filters Name=name,Values="chic-$instance_id" --query Images[].ImageId --output text)
+}
+
+find_ami
+while [ -z "$new_ami_id" ]; do
+	echo "* Waiting for AMI to appear..." >&2
+	sleep 10
+	find_ami
 done
 
-echo "$new_ami_id"
+# Add tags
+if [ ! -z "$tags" ]; then
+	aws ec2 create-tags --profile "$profile" --region "$region" --resources $new_ami_id --tags $tags
+fi
 
-terminated_instance_id=$(aws ec2 terminate-instances $additional_aws_options $global_aws_options --instance-ids "$instance_id" --query TerminatingInstances[].InstanceId --output text)
+terminate
+
+echo "$new_ami_id"
