@@ -17,6 +17,7 @@ The following command-line options are supported:
 * `-f <config>` Load configuration from the given file
 * `-d` Dry run all awscli commands
 * `-q` Quiet the output
+* `-b` Non-interactive mode
 
 Specify zero, one or more file names after the options to choose the shell-scripts to run
 to bootstrap the instance to create the image.

@@ -3,3 +3,4 @@ FROM ami-e2021d81
 COPY bootstrap.sh /opt/bootstrap.sh
 
 BOOTSTRAP /opt/bootstrap.sh
+INSTANCE_TYPE t2.medium

@@ -1,27 +1,29 @@
 #!/bin/bash -eu
 
 set +u
-instance_type=${CHIC_INSTANCE_TYPE:-t2.micro}
-name="$CHIC_AMI_NAME"
 profile="$CHIC_PROFILE"
 region="$CHIC_REGION"
 set -u
 
+name=
+instance_type=
 tags=
 quiet=0
+noninteractive=
 
 usage() {
 	echo "usage: $0 [-i <instance type>]" >&2
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
 	echo "          [-p <profile>] [-r <region>]" >&2
 	echo "          [-f <config file>]" >&2
-	echo "          [-d] [-q] <basedir>" >&2
+	echo "          [-d] [-q] [-b] <basedir>" >&2
 	echo >&2
 	echo " -d Dry run" >&2
 	echo " -q Quiet" >&2
+	echo " -b Non-interactive mode" >&2
 }
 
-while getopts ":f:i:n:t:p:r:dq" opt; do
+while getopts ":f:i:n:t:p:r:dqb" opt; do
 	case $opt in
     	f)
 			set -a # So all variables set are exported for our template engine
@@ -50,6 +52,9 @@ while getopts ":f:i:n:t:p:r:dq" opt; do
 			;;
 		q)
 			quiet=1
+			;;
+		b)
+			noninteractive=1
 			;;
     	\?)
 	      	echo "Invalid option: -$OPTARG" >&2
@@ -126,12 +131,20 @@ FROM() {
 	ami="$1"
 }
 
+INSTANCE_TYPE() {
+	chicfile_instance_type="$1"
+}
+
 # Run Chicfile
 . "$chicfile"
 
 if [ -z "$ami" ]; then
 	echo "Chicfile must contain FROM" >&2
 	exit 1
+fi
+
+if [ -z "$instance_type" -a ! -z "${chicfile_instance_type:-}" ]; then
+	instance_type="$chicfile_instance_type"
 fi
 
 # Create bootstrap archive
@@ -151,7 +164,25 @@ fi
 
 # Termination
 
+prompt_yn() {
+	local prompt_message="$1"
+	local prompt_response=""
+	while [ "$prompt_response" != "y" -a "$prompt_response" != "n" ]; do
+		read -e -p "$prompt_message (y/n) " prompt_response
+	done
+	echo "$prompt_response"
+}
+
 terminate() {
+	unclean="${1:-}"
+
+	if [ ! -z "$unclean" -a -z "$noninteractive" ]; then
+		local delete_response=$(prompt_yn "Delete stacks")
+		if [ "$delete_response" == "n" ]; then
+			return 0
+		fi
+	fi
+
 	if [ ! -z "${bucket:-}" ]; then
 		echo "* Deleting bootstrap bucket..." >&2
 		AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
@@ -166,13 +197,18 @@ terminate() {
 	if [ ! -z "${image_stack_name:-}" ]; then
 		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
 	fi
+
+	rm -f "$archive"
+	if [ ! -z "$working_dir" ]; then
+		rm -rf "$working_dir"
+	fi
 }
 
 trap ctrl_c INT
 
 ctrl_c() {
 	echo "* Cancelling" >&2
-	terminate
+	terminate y
 	exit 1
 }
 
@@ -182,6 +218,7 @@ bucket_stack_name="chic-bucket-${date_stamp}"
 echo "* Creating bucket stack: $bucket_stack_name" >&2
 aws cloudformation create-stack $global_aws_options \
 	--stack-name "$bucket_stack_name" \
+	--disable-rollback \
 	--template-body file://$(dirname $0)/lib/bucket.yml \
 	--capabilities CAPABILITY_IAM > /dev/null
 
@@ -199,16 +236,27 @@ describe_stack_outputs() {
 		--query 'Stacks[].Outputs[].OutputValue'
 }
 
+describe_stack_events() {
+	aws cloudformation describe-stack-events $global_aws_options \
+		--stack-name "$1" \
+		--output table \
+		--query 'StackEvents[].[LogicalResourceId, ResourceStatus, ResourceType, ResourceStatusReason, Timestamp]'
+}
+
 stack_state=
+echo -n "* Waiting for bucket stack to complete" >&2
 while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
-	echo "* Waiting for bucket stack to complete" >&2
 	sleep 5
+	echo -n . >&2
 	stack_state=$(describe_stack_status "$bucket_stack_name")
 done
+echo >&2
 
 if [ "$stack_state" != "CREATE_COMPLETE" ]; then
 	echo "Unexpected bucket stack state: $stack_state" >&2
-	terminate
+
+	describe_stack_events "$bucket_stack_name"
+	terminate y
 	exit 1
 fi
 
@@ -225,6 +273,7 @@ upload_bootstrap() {
 	return $?
 }
 
+echo "* Uploading bootstrap" >&2
 set +e
 upload_bootstrap
 if [ $? != 0 ]; then
@@ -233,6 +282,7 @@ if [ $? != 0 ]; then
 
 	if [ $? != 0 ]; then
 		echo "Failed to upload bootstrap archive" >&2
+		terminate y
 		exit 1
 	fi
 fi
@@ -245,21 +295,63 @@ aws cloudformation create-stack $global_aws_options \
 	--stack-name "$image_stack_name" \
 	--template-body file://$(dirname $0)/lib/build-image.yml \
 	--capabilities CAPABILITY_IAM \
+	--disable-rollback \
 	--parameters ParameterKey=BuildBucketName,ParameterValue="$bucket" \
 	ParameterKey=ImageId,ParameterValue="$ami" \
-	ParameterKey=InstanceType,ParameterValue="$instance_type" \
-	ParameterKey=BootstrapScriptPath,ParameterValue="$bootstrap_script" > /dev/null
+	ParameterKey=InstanceType,ParameterValue="${instance_type:-t2.micro}" \
+	ParameterKey=BootstrapScriptPath,ParameterValue="$bootstrap_script" \
+	> /dev/null
 
 stack_state=
+echo -n "* Waiting for image stack to complete" >&2
 while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
-	echo "* Waiting for image stack to complete" >&2
 	sleep 5
+	echo -n . >&2
 	stack_state=$(describe_stack_status "$image_stack_name")
 done
+echo >&2
 
 if [ "$stack_state" != "CREATE_COMPLETE" ]; then
 	echo "Unexpected image stack state: $stack_state" >&2
-	terminate
+
+	describe_stack_events "$image_stack_name"
+
+	if [ -z "$noninteractive" ]; then
+		# console_response=$(prompt_yn "View instance console")
+		# if [ "$console_response" == "y" ]; then
+		# 	instance_id=$(aws ec2 describe-instances $global_aws_options \
+		# 		--filters Name=tag:Name,Values="chic-image-builder-${image_stack_name}" \
+		# 		Name=instance-state-name,Values=running,pending \
+		# 		--output text \
+		# 		--query Reservations[].Instances[].InstanceId)
+		# 	if [ ! -z "$instance_id" ]; then
+		# 		aws ec2 get-console-output $global_aws_options --instance-id "$instance_id" --output text | ${PAGER:-less}
+		# 	else
+		# 		echo "InstanceId not found" >&2
+		# 	fi
+		# fi
+
+		# Logs
+		logfile=$(mktemp)
+		set +e
+		AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
+			aws s3 cp s3://$bucket/logs/cfn-init.log "$logfile" --quiet
+		if [ $? == 0 ]; then
+			log_response=
+			if [ -z "$noninteractive" ]; then
+				log_response=$(prompt_yn "View cfn-init.log")
+				if [ "$log_response" == "y" ]; then
+					${PAGER:-less} "$logfile"
+				fi
+			else
+				cat "$logfile" >&2
+			fi
+		fi
+		rm -f "$logfile"
+		set -e
+	fi
+
+	terminate y
 	exit 1
 fi
 
@@ -280,11 +372,13 @@ if [ ! -z "$tags" ]; then
 fi
 
 new_ami_state=
+echo -n "* Waiting for AMI to complete" >&2
 while [ -z "$new_ami_state" -o "$new_ami_state" == "pending" ]; do
-	echo "* Waiting for AMI to complete..." >&2
 	sleep 10
+	echo -n . >&2
 	new_ami_state=$(aws ec2 describe-images $global_aws_options --image-ids "$new_ami_id" --query Images[].State --output text)
 done
+echo >&2
 
 terminate
 

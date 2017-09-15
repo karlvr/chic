@@ -22,8 +22,8 @@ Resources:
                   - s3:ListBucket
                   - s3:ListObjects
                 Resource:
-                  - !GetAtt BuildBucket.Arn
-                  - !Join [ "", [ !GetAtt BuildBucket.Arn, "/*" ] ]
+                  - !Sub ${BuildBucket.Arn}
+                  - !Sub ${BuildBucket.Arn}/*
   BuildBucketUserAccessKey:
     Type: AWS::IAM::AccessKey
     Properties:

@@ -6,7 +6,7 @@ Resources:
     Properties:
       Path: /
       Policies:
-        - PolicyName: BoostrapUserPolicy
+        - PolicyName: BoostrapUserBucketPolicy
           PolicyDocument:
             Version: 2012-10-17
             Statement:
@@ -14,62 +14,87 @@ Resources:
                 Action:
                   - s3:GetObject
                   - s3:ListBucket
+                  - s3:PutObject
                 Resource:
-                  - !Join [ "", [ "arn:aws:s3:::", !Ref BuildBucketName ] ]
-                  - !Join [ "", [ "arn:aws:s3:::", !Ref BuildBucketName, "/*" ] ]
+                  - !Sub arn:aws:s3:::${BuildBucketName}
+                  - !Sub arn:aws:s3:::${BuildBucketName}/*
   BootstrapUserAccessKey:
     Type: AWS::IAM::AccessKey
     Properties:
       UserName: !Ref BootstrapUser
+  BuildVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 172.31.0.0/16
+      Tags:
+        - Key: Name
+          Value: !Sub chic-vpc-${AWS::StackName}
+  BuildSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      CidrBlock: 172.31.0.0/24
+      Tags:
+        - Key: Name
+          Value: !Sub chic-subnet-${AWS::StackName}
+      VpcId: !Ref BuildVPC
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for building Chic image
+      VpcId: !Ref BuildVPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub chic-security-group-${AWS::StackName}
   BuildInstance:
     Type: AWS::EC2::Instance
     CreationPolicy:
       ResourceSignal:
-        Timeout: PT10M
+        Timeout: PT60M
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref ImageId
       Tags:
         - Key: Name
-          Value: chic-image-builder
+          Value: !Sub chic-image-builder-${AWS::StackName}
+      SecurityGroupIds:
+        - !Ref SecurityGroup
+      SubnetId: !Ref BuildSubnet
       UserData:
         Fn::Base64:
-          Fn::Join:
-            - ""
-            - - "#!/bin/bash -x\n"
-              - "apt-get update\n"
-              - "apt-get install -y python-pip\n"
-              - "pip install --upgrade pip\n"
-              - "pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n"
-              - "cfn-init -v --resource BuildInstance"
-              - " --stack "
-              - !Ref AWS::StackName
-              - " --region "
-              - !Ref AWS::Region
-              - "\n"
-              - "cfn-signal -e $? --resource BuildInstance"
-              - " --stack "
-              - !Ref AWS::StackName
-              - " --region "
-              - !Ref AWS::Region
-              - "\n"
+          !Sub |
+            #!/bin/bash -x
+            apt-get update
+            apt-get install -y python-pip awscli
+            pip install --upgrade pip
+            pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
+            cfn-init -v --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region}
+            cfn_init_result=$?
+            export AWS_ACCESS_KEY_ID="${BootstrapUserAccessKey}"
+            export AWS_SECRET_ACCESS_KEY="${BootstrapUserAccessKey.SecretAccessKey}"
+            export AWS_DEFAULT_REGION="${AWS::Region}"
+            aws s3 cp /var/log/cloud-init.log s3://${BuildBucketName}/log/
+            aws s3 cp /var/log/cloud-init-output.log s3://${BuildBucketName}/log/
+            aws s3 cp /var/log/cfn-init.log s3://${BuildBucketName}/log/
+            cfn-signal -e $cfn_init_result --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region}
     Metadata:
       AWS::CloudFormation::Init:
         config:
-          packages:
-            apt:
-              awscli: []
-          # sources:
-          #   /: !Join [ "", [ "https://", !Ref BuildBucketName, ".s3.amazonaws.com/bootstrap.tar.gz" ] ]
+          sources:
+            "/": !Sub https://${BuildBucketName}.s3.amazonaws.com/bootstrap.tar.gz
           commands:
-            00aws-access-key:
-              command: !Join [ "", [ "aws configure set aws_access_key_id ", !Ref BootstrapUserAccessKey ] ]
-            00aws-secret-access-key:
-              command: !Join [ "", [ "aws configure set aws_secret_access_key ", !GetAtt BootstrapUserAccessKey.SecretAccessKey ] ]
-            00aws-default-region:
-              command: !Join [ "", [ "aws configure set default.region ", !Ref "AWS::Region" ] ]
             01bootstrap:
-              command: !Ref BootstrapScriptPath
+              command:
+                - !Ref BootstrapScriptPath
+      AWS::CloudFormation::Authentication:
+        S3AccessCreds:
+          type: S3
+          accessKeyId: !Ref BootstrapUserAccessKey
+          secretKey: !GetAtt BootstrapUserAccessKey.SecretAccessKey
+          buckets:
+            - !Ref BuildBucketName
 Parameters:
   BuildBucketName:
     Description: The name of the build bucket.
