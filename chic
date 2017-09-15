@@ -1,38 +1,33 @@
 #!/bin/bash -eu
 
 set +u
-ami="$CHIC_AMI"
 instance_type=${CHIC_INSTANCE_TYPE:-t2.micro}
 name="$CHIC_AMI_NAME"
 profile="$CHIC_PROFILE"
 region="$CHIC_REGION"
-subnet_id="$CHIC_SUBNET_ID"
 set -u
 
 tags=
 quiet=0
 
 usage() {
-	echo "usage: $0 [-a <base ami>] [-i <instance type>]"
-	echo "          [-n <output ami name>] [-t <tag key>=<value>]+"
-	echo "          [-p <profile>] [-r <region>] [-s <subnet>]"
-	echo "          [-f <config file>]"
-	echo "          [-d] [-q] <bootstrap script> ..."
-	echo
-	echo " -d Dry run"
-	echo " -q Quiet"
+	echo "usage: $0 [-i <instance type>]" >&2
+	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
+	echo "          [-p <profile>] [-r <region>]" >&2
+	echo "          [-f <config file>]" >&2
+	echo "          [-d] [-q] <basedir>" >&2
+	echo >&2
+	echo " -d Dry run" >&2
+	echo " -q Quiet" >&2
 }
 
-while getopts ":f:a:i:n:t:p:r:s:dq" opt; do
+while getopts ":f:i:n:t:p:r:dq" opt; do
 	case $opt in
     	f)
 			set -a # So all variables set are exported for our template engine
 			source "$OPTARG"
 			set +a
 	      	;;
-	    a)
-			ami="$OPTARG"
-			;;
 		i)
 			instance_type="$OPTARG"
 			;;
@@ -49,9 +44,6 @@ while getopts ":f:a:i:n:t:p:r:s:dq" opt; do
 			;;
 		r)
 			region="$OPTARG"
-			;;
-		s)
-			subnet_id="$OPTARG"
 			;;
 	    d)
 			additional_aws_options="${additional_aws_options:-} --dry-run"
@@ -71,12 +63,82 @@ fi
 
 shift $((OPTIND-1))
 
-# https://github.com/tests-always-included/mo
-mo=$(dirname $0)/lib/mo/mo
+base_dir="${1:-}"
+if [ -z "$base_dir" ]; then
+	usage
+	exit 1
+fi
 
-custom_bootstrap=$(for bootstrap_file in $* ; do
-	"$mo" "$bootstrap_file"
-done)
+chicfile="$base_dir/Chicfile"
+
+if [ ! -f "$chicfile" ]; then
+	echo "Chicfile not found in $base_dir" >&2
+	exit 1
+fi
+
+# Build bootstrap
+
+working_dir=$(mktemp -d)
+echo "* Building bootstrap in $working_dir" >&2
+
+bootstrap_script=
+ami=
+
+COPY() {
+	source="${1:-}"
+	dest="${2:-}"
+
+	if [ -z "$source" -o -z "$dest" ]; then
+		echo "usage: COPY <source> <dest>" >&2
+		return 1
+	fi
+	if [[ "$dest" =~ \.\. ]]; then
+		echo "COPY dest must not include ..s: $dest" >&2
+		return 1
+	fi
+
+	# Trim leading /s
+	while [[ "$dest" =~ ^/ ]]; do
+		dest=$(echo "$dest" | cut -c2-)
+	done
+
+	echo "* Copying $source to $dest" >&2
+
+	pushd "$base_dir" >/dev/null
+	if [ -d "$source" ]; then
+		mkdir -p "$working_dir/$dest"
+	else
+		mkdir -p "$working_dir/$(dirname $dest)"
+	fi
+	
+	rsync -a --exclude "**/.git*" --exclude "**/.hg*" --exclude "**/.DS_Store" "$source" "$working_dir/$dest"
+	result=$?
+
+	popd >/dev/null
+	return $result
+}
+
+BOOTSTRAP() {
+	bootstrap_script="$1"
+}
+
+FROM() {
+	ami="$1"
+}
+
+# Run Chicfile
+. "$chicfile"
+
+if [ -z "$ami" ]; then
+	echo "Chicfile must contain FROM" >&2
+	exit 1
+fi
+
+# Create bootstrap archive
+archive=$(mktemp)
+pushd "$working_dir" > /dev/null && tar -czf "$archive" . && popd > /dev/null
+
+date_stamp=$(date +%Y%m%d%H%M%S)
 
 # AWS configuration
 global_aws_options=
@@ -87,54 +149,23 @@ if [ ! -z "${region:-}" ]; then
 	global_aws_options="$global_aws_options --region $region"
 fi
 
-aws_access_key_id=$(aws configure get aws_access_key_id $global_aws_options)
-aws_secret_access_key=$(aws configure get aws_secret_access_key $global_aws_options)
-if [ -z "${region:-}" ]; then
-	set +e
-	region=$(aws configure get region $global_aws_options)
-	if [ $? != 0 ]; then
-		echo "Failed to determine AWS region. Please specify the region using the -r command-line option" >&2
-		echo "or the CHIC_REGION environment variable" >&2
-		exit 1
-	fi
-	set -e
-fi
-
-# AMI
-if [ -z "${ami:-}" ]; then
-	usage
-	echo
-	echo "AMI is required, either via -i command-line option or the CHIC_AMI environment variable" >&2
-	exit 1
-fi
-
-bootstrap_template=$(dirname $0)/share/bootstrap.sh
-bootstrap=$(BOOTSTRAP_SCRIPT="$custom_bootstrap" \
-	BOOTSTRAP_AWS_ACCESS_KEY_ID="$aws_access_key_id" \
-	BOOTSTRAP_AWS_SECRET_ACCESS_KEY="$aws_secret_access_key" \
-	BOOTSTRAP_AWS_REGION="$region" \
-	"$mo" "$bootstrap_template")
-
-if [ -z "${subnet_id:-}" ]; then
-	subnets=$(aws ec2 describe-subnets $global_aws_options --query Subnets[].SubnetId --output text)
-	for i in $subnets ; do
-		subnet_id="$i"
-		echo "* Choosing subnet-id: $subnet_id" >&2
-		break
-	done
-fi
-
-additional_aws_options=
-run_options="--instance-type $instance_type --subnet-id $subnet_id"
-
-instance_id=$(aws ec2 run-instances $additional_aws_options $global_aws_options --image-id "$ami" \
-	--count "1" $run_options \
-	--user-data "$bootstrap" \
-	--query "Instances[].InstanceId" --output text)
+# Termination
 
 terminate() {
-	echo "* Terminating builder instance..." >&2
-	terminated_instance_id=$(aws ec2 terminate-instances $additional_aws_options $global_aws_options --instance-ids "$instance_id" --query TerminatingInstances[].InstanceId --output text)
+	if [ ! -z "${bucket:-}" ]; then
+		echo "* Deleting bootstrap bucket..." >&2
+		AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
+			aws s3 rm "s3://$bucket/" \
+			--recursive --quiet
+	fi
+
+	echo "* Deleting stacks..." >&2
+	if [ ! -z "${bucket_stack_name:-}" ]; then
+		aws cloudformation delete-stack $global_aws_options --stack-name "$bucket_stack_name"
+	fi
+	if [ ! -z "${image_stack_name:-}" ]; then
+		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
+	fi
 }
 
 trap ctrl_c INT
@@ -145,24 +176,116 @@ ctrl_c() {
 	exit 1
 }
 
-aws ec2 create-tags --profile "$profile" --region "$region" --resources $instance_id --tags Key=Name,Value="chic-builder-$name"
+# Build bootstrap bucket
+bucket_stack_name="chic-bucket-${date_stamp}"
 
-find_ami() {
-	new_ami_id=$(aws ec2 describe-images $additional_aws_options $global_aws_options --owners self --filters Name=name,Values="chic-$instance_id" --query Images[].ImageId --output text)
+echo "* Creating bucket stack: $bucket_stack_name" >&2
+aws cloudformation create-stack $global_aws_options \
+	--stack-name "$bucket_stack_name" \
+	--template-body file://$(dirname $0)/lib/bucket.yml \
+	--capabilities CAPABILITY_IAM > /dev/null
+
+describe_stack_status() {
+	aws cloudformation describe-stacks $global_aws_options \
+		--stack-name "$1" \
+		--output text \
+		--query 'Stacks[].StackStatus'
 }
 
-find_ami
-while [ -z "$new_ami_id" ]; do
-	echo "* Waiting for AMI to appear..." >&2
-	sleep 10
-	find_ami
+describe_stack_outputs() {
+	aws cloudformation describe-stacks $global_aws_options \
+		--stack-name "$1" \
+		--output text \
+		--query 'Stacks[].Outputs[].OutputValue'
+}
+
+stack_state=
+while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
+	echo "* Waiting for bucket stack to complete" >&2
+	sleep 5
+	stack_state=$(describe_stack_status "$bucket_stack_name")
 done
 
-terminate
+if [ "$stack_state" != "CREATE_COMPLETE" ]; then
+	echo "Unexpected bucket stack state: $stack_state" >&2
+	terminate
+	exit 1
+fi
+
+describe_stacks=$(describe_stack_outputs "$bucket_stack_name")
+
+bucket=$(echo $describe_stacks | cut -f1 -d ' ')
+bucket_access_key=$(echo $describe_stacks | cut -f2 -d ' ')
+bucket_secret_access_key=$(echo $describe_stacks | cut -f3 -d ' ')
+
+upload_bootstrap() {
+	AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
+		aws s3 cp "$archive" s3://$bucket/bootstrap.tar.gz \
+		--quiet
+	return $?
+}
+
+set +e
+upload_bootstrap
+if [ $? != 0 ]; then
+	sleep 5
+	upload_bootstrap
+
+	if [ $? != 0 ]; then
+		echo "Failed to upload bootstrap archive" >&2
+		exit 1
+	fi
+fi
+set -e
+
+image_stack_name="chic-image-${date_stamp}"
+
+echo "* Creating image stack: $image_stack_name" >&2
+aws cloudformation create-stack $global_aws_options \
+	--stack-name "$image_stack_name" \
+	--template-body file://$(dirname $0)/lib/build-image.yml \
+	--capabilities CAPABILITY_IAM \
+	--parameters ParameterKey=BuildBucketName,ParameterValue="$bucket" \
+	ParameterKey=ImageId,ParameterValue="$ami" \
+	ParameterKey=InstanceType,ParameterValue="$instance_type" \
+	ParameterKey=BootstrapScriptPath,ParameterValue="$bootstrap_script" > /dev/null
+
+stack_state=
+while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
+	echo "* Waiting for image stack to complete" >&2
+	sleep 5
+	stack_state=$(describe_stack_status "$image_stack_name")
+done
+
+if [ "$stack_state" != "CREATE_COMPLETE" ]; then
+	echo "Unexpected image stack state: $stack_state" >&2
+	terminate
+	exit 1
+fi
+
+describe_stacks=$(describe_stack_outputs "$image_stack_name")
+
+instance_id=$(echo $describe_stacks | cut -f1 -d ' ')
+
+echo "* Creating AMI" >&2
+new_ami_id=$(aws ec2 create-image $global_aws_options \
+	--instance-id $instance_id --name "chic-$instance_id" \
+	--description "AMI built using Chic" \
+	--query ImageId --output text)
 
 # Add tags
 if [ ! -z "$tags" ]; then
-	aws ec2 create-tags --profile "$profile" --region "$region" --resources $new_ami_id --tags $tags
+	echo "* Tagging AMI" >&2
+	aws ec2 create-tags $global_aws_options --resources $new_ami_id --tags $tags
 fi
+
+new_ami_state=
+while [ -z "$new_ami_state" -o "$new_ami_state" == "pending" ]; do
+	echo "* Waiting for AMI to complete..." >&2
+	sleep 10
+	new_ami_state=$(aws ec2 describe-images $global_aws_options --image-ids "$new_ami_id" --query Images[].State --output text)
+done
+
+terminate
 
 echo "$new_ami_id"

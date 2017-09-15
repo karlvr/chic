@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: 2010-09-09
+#Metadata:
+Resources:
+  BootstrapUser:
+    Type: AWS::IAM::User
+    Properties:
+      Path: /
+      Policies:
+        - PolicyName: BoostrapUserPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Join [ "", [ "arn:aws:s3:::", !Ref BuildBucketName ] ]
+                  - !Join [ "", [ "arn:aws:s3:::", !Ref BuildBucketName, "/*" ] ]
+  BootstrapUserAccessKey:
+    Type: AWS::IAM::AccessKey
+    Properties:
+      UserName: !Ref BootstrapUser
+  BuildInstance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref ImageId
+      Tags:
+        - Key: Name
+          Value: chic-image-builder
+      UserData:
+        Fn::Base64:
+          Fn::Join:
+            - ""
+            - - "#!/bin/bash -x\n"
+              - "apt-get update\n"
+              - "apt-get install -y python-pip\n"
+              - "pip install --upgrade pip\n"
+              - "pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz\n"
+              - "cfn-init -v --resource BuildInstance"
+              - " --stack "
+              - !Ref AWS::StackName
+              - " --region "
+              - !Ref AWS::Region
+              - "\n"
+              - "cfn-signal -e $? --resource BuildInstance"
+              - " --stack "
+              - !Ref AWS::StackName
+              - " --region "
+              - !Ref AWS::Region
+              - "\n"
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            apt:
+              awscli: []
+          # sources:
+          #   /: !Join [ "", [ "https://", !Ref BuildBucketName, ".s3.amazonaws.com/bootstrap.tar.gz" ] ]
+          commands:
+            00aws-access-key:
+              command: !Join [ "", [ "aws configure set aws_access_key_id ", !Ref BootstrapUserAccessKey ] ]
+            00aws-secret-access-key:
+              command: !Join [ "", [ "aws configure set aws_secret_access_key ", !GetAtt BootstrapUserAccessKey.SecretAccessKey ] ]
+            00aws-default-region:
+              command: !Join [ "", [ "aws configure set default.region ", !Ref "AWS::Region" ] ]
+            01bootstrap:
+              command: !Ref BootstrapScriptPath
+Parameters:
+  BuildBucketName:
+    Description: The name of the build bucket.
+    Type: String
+  InstanceType:
+    Description: The instance type to use to build the image.
+    Type: String
+    Default: t2.small
+  ImageId:
+    Description: The AMI to use to build the image.
+    Type: String
+  BootstrapScriptPath:
+    Description: The path to the script to run to bootstrap the image.
+    Type: String
+    Default: ""
+Outputs:
+  BuildInstanceId:
+    Description: The instance ID of the build instance.
+    Value: !Ref BuildInstance
