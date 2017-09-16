@@ -10,11 +10,12 @@ instance_type=
 tags=
 quiet=0
 noninteractive=
+keypair=
 
 usage() {
 	echo "usage: $0 [-i <instance type>]" >&2
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
-	echo "          [-p <profile>] [-r <region>]" >&2
+	echo "          [-p <profile>] [-r <region>] [-k keypair]" >&2
 	echo "          [-f <config file>]" >&2
 	echo "          [-d] [-q] [-b] <basedir>" >&2
 	echo >&2
@@ -23,7 +24,7 @@ usage() {
 	echo " -b Non-interactive mode" >&2
 }
 
-while getopts ":f:i:n:t:p:r:dqb" opt; do
+while getopts ":f:i:n:t:p:r:k:dqb" opt; do
 	case $opt in
     	f)
 			set -a # So all variables set are exported for our template engine
@@ -46,6 +47,9 @@ while getopts ":f:i:n:t:p:r:dqb" opt; do
 			;;
 		r)
 			region="$OPTARG"
+			;;
+		k)
+			keypair="$OPTARG"
 			;;
 	    d)
 			additional_aws_options="${additional_aws_options:-} --dry-run"
@@ -191,8 +195,8 @@ terminate() {
 	fi
 
 	echo "* Deleting stacks..." >&2
-	if [ ! -z "${bucket_stack_name:-}" ]; then
-		aws cloudformation delete-stack $global_aws_options --stack-name "$bucket_stack_name"
+	if [ ! -z "${init_stack_name:-}" ]; then
+		aws cloudformation delete-stack $global_aws_options --stack-name "$init_stack_name"
 	fi
 	if [ ! -z "${image_stack_name:-}" ]; then
 		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
@@ -212,14 +216,14 @@ ctrl_c() {
 	exit 1
 }
 
-# Build bootstrap bucket
-bucket_stack_name="chic-bucket-${date_stamp}"
+# Build bootstrap
+init_stack_name="chic-init-${date_stamp}"
 
-echo "* Creating bucket stack: $bucket_stack_name" >&2
+echo "* Creating init stack: $init_stack_name" >&2
 aws cloudformation create-stack $global_aws_options \
-	--stack-name "$bucket_stack_name" \
+	--stack-name "$init_stack_name" \
 	--disable-rollback \
-	--template-body file://$(dirname $0)/lib/bucket.yml \
+	--template-body file://$(dirname $0)/lib/init.yml \
 	--capabilities CAPABILITY_IAM > /dev/null
 
 describe_stack_status() {
@@ -233,7 +237,7 @@ describe_stack_outputs() {
 	aws cloudformation describe-stacks $global_aws_options \
 		--stack-name "$1" \
 		--output text \
-		--query 'Stacks[].Outputs[].OutputValue'
+		--query 'Stacks[].Outputs[].[OutputKey,OutputValue]'
 }
 
 describe_stack_events() {
@@ -244,47 +248,42 @@ describe_stack_events() {
 }
 
 stack_state=
-echo -n "* Waiting for bucket stack to complete" >&2
+echo -n "* Waiting for init stack to complete" >&2
 while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
 	sleep 5
 	echo -n . >&2
-	stack_state=$(describe_stack_status "$bucket_stack_name")
+	stack_state=$(describe_stack_status "$init_stack_name")
 done
 echo >&2
 
 if [ "$stack_state" != "CREATE_COMPLETE" ]; then
-	echo "Unexpected bucket stack state: $stack_state" >&2
+	echo "Unexpected init stack state: $stack_state" >&2
 
-	describe_stack_events "$bucket_stack_name"
+	describe_stack_events "$init_stack_name"
 	terminate y
 	exit 1
 fi
 
-describe_stacks=$(describe_stack_outputs "$bucket_stack_name")
+describe_stacks=$(describe_stack_outputs "$init_stack_name")
 
-bucket=$(echo $describe_stacks | cut -f1 -d ' ')
-bucket_access_key=$(echo $describe_stacks | cut -f2 -d ' ')
-bucket_secret_access_key=$(echo $describe_stacks | cut -f3 -d ' ')
-
-upload_bootstrap() {
-	AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
-		aws s3 cp "$archive" s3://$bucket/bootstrap.tar.gz \
-		--quiet
-	return $?
+extract_stack_output() {
+	echo "$describe_stacks" | grep "^$1\t" | cut -f2
 }
+
+bucket=$(extract_stack_output BucketName)
+log_group=$(extract_stack_output LogGroup)
+log_group_arn=$(extract_stack_output LogGroupArn)
+
+echo "* Created bucket: $bucket" >&2
 
 echo "* Uploading bootstrap" >&2
 set +e
-upload_bootstrap
+aws s3 cp "$archive" s3://$bucket/bootstrap.tar.gz $global_aws_options >&2
 if [ $? != 0 ]; then
-	sleep 5
-	upload_bootstrap
-
-	if [ $? != 0 ]; then
-		echo "Failed to upload bootstrap archive" >&2
-		terminate y
-		exit 1
-	fi
+	set -e
+	echo "Failed to upload bootstrap archive" >&2
+	terminate y
+	exit 1
 fi
 set -e
 
@@ -300,6 +299,8 @@ aws cloudformation create-stack $global_aws_options \
 	ParameterKey=ImageId,ParameterValue="$ami" \
 	ParameterKey=InstanceType,ParameterValue="${instance_type:-t2.micro}" \
 	ParameterKey=BootstrapScriptPath,ParameterValue="$bootstrap_script" \
+	ParameterKey=LogGroup,ParameterValue="$log_group" \
+	ParameterKey=LogGroupArn,ParameterValue="$log_group_arn" \
 	> /dev/null
 
 stack_state=
@@ -334,8 +335,7 @@ if [ "$stack_state" != "CREATE_COMPLETE" ]; then
 		# Logs
 		logfile=$(mktemp)
 		set +e
-		AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
-			aws s3 cp s3://$bucket/logs/cfn-init.log "$logfile" --quiet
+		aws s3 cp s3://$bucket/logs/cfn-init.log "$logfile" --quiet $global_aws_options
 		if [ $? == 0 ]; then
 			log_response=
 			if [ -z "$noninteractive" ]; then
@@ -357,7 +357,12 @@ fi
 
 describe_stacks=$(describe_stack_outputs "$image_stack_name")
 
-instance_id=$(echo $describe_stacks | cut -f1 -d ' ')
+instance_id=$(extract_stack_output BuildInstanceId)
+if [ -z "$instance_id" ]; then
+	echo "Didn't get instance id from image stack" >&2
+	terminate y
+	exit 1
+fi
 
 echo "* Creating AMI" >&2
 new_ami_id=$(aws ec2 create-image $global_aws_options \

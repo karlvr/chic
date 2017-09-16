@@ -1,10 +1,19 @@
 AWSTemplateFormatVersion: 2010-09-09
 #Metadata:
 Resources:
-  BootstrapUser:
-    Type: AWS::IAM::User
+  BootstrapRole:
+    Type: AWS::IAM::Role
     Properties:
       Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
       Policies:
         - PolicyName: BoostrapUserBucketPolicy
           PolicyDocument:
@@ -18,10 +27,18 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::${BuildBucketName}
                   - !Sub arn:aws:s3:::${BuildBucketName}/*
-  BootstrapUserAccessKey:
-    Type: AWS::IAM::AccessKey
-    Properties:
-      UserName: !Ref BootstrapUser
+        - PolicyName: BootstrapUserLogsPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogStreams
+                Resource:
+                  - !Ref LogGroupArn
   BuildVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -56,12 +73,14 @@ Resources:
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref ImageId
+      KeyName: !Ref KeyName
       Tags:
         - Key: Name
           Value: !Sub chic-image-builder-${AWS::StackName}
       SecurityGroupIds:
         - !Ref SecurityGroup
       SubnetId: !Ref BuildSubnet
+      IamInstanceProfile: !Ref BootstrapRole
       UserData:
         Fn::Base64:
           !Sub |
@@ -70,31 +89,83 @@ Resources:
             apt-get install -y python-pip awscli
             pip install --upgrade pip
             pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
-            cfn-init -v --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region}
+            cfn-init -v --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region} --configsets install
             cfn_init_result=$?
-            export AWS_ACCESS_KEY_ID="${BootstrapUserAccessKey}"
-            export AWS_SECRET_ACCESS_KEY="${BootstrapUserAccessKey.SecretAccessKey}"
-            export AWS_DEFAULT_REGION="${AWS::Region}"
             aws s3 cp /var/log/cloud-init.log s3://${BuildBucketName}/log/
             aws s3 cp /var/log/cloud-init-output.log s3://${BuildBucketName}/log/
             aws s3 cp /var/log/cfn-init.log s3://${BuildBucketName}/log/
             cfn-signal -e $cfn_init_result --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region}
     Metadata:
       AWS::CloudFormation::Init:
-        config:
+        configSets:
+          install:
+            - install_logs
+            - install_bootstrap
+            - tidy_logs
+        install_logs:
+          files:
+            "/etc/awslogs/awslogs.conf":
+              content:
+              # https://s3.amazonaws.com/cloudformation-templates-us-east-1/CloudWatch_Logs.template
+              # http://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/AgentReference.html
+                !Sub |
+                  [general]
+                  state_file = /var/awslogs/state/agent-state
+
+                  [/var/log/cloud-init.log]
+                  file = /var/log/cloud-init.log
+                  log_group_name = ${LogGroup}
+                  log_stream_name = cloud-init.log
+                  datetime_format =
+
+                  [/var/log/cloud-init-output.log]
+                  file = /var/log/cloud-init-output.log
+                  log_group_name = ${LogGroup}
+                  log_stream_name = cloud-init-output.log
+                  datetime_format =
+
+                  [/var/log/cfn-init.log]
+                  file = /var/log/cfn-init.log
+                  log_group_name = ${LogGroup}
+                  log_stream_name = cfn-init.log
+                  datetime_format =
+              mode: 000644
+              owner: root
+              group: root
+          packages:
+            apt:
+              curl: []
+          commands:
+            01awslogs:
+              command:
+                !Sub |
+                  curl https://s3.amazonaws.com/aws-cloudwatch/downloads/latest/awslogs-agent-setup.py -o /tmp/awslogs-agent-setup.py
+                  python /tmp/awslogs-agent-setup.py --region ${AWS::Region} --non-interactive --configfile /etc/awslogs/awslogs.conf
+                  rm -f /tmp/awslogs-agent-setup.py
+        tidy_logs:
+          files:
+            "/etc/awslogs/awslogs.conf":
+              content:
+                !Sub |
+                  [general]
+                  state_file = /var/awslogs/state/agent-state
+              mode: 000644
+              owner: root
+              group: root
+        install_bootstrap:
           sources:
             "/": !Sub https://${BuildBucketName}.s3.amazonaws.com/bootstrap.tar.gz
           commands:
             01bootstrap:
               command:
                 - !Ref BootstrapScriptPath
-      AWS::CloudFormation::Authentication:
-        S3AccessCreds:
-          type: S3
-          accessKeyId: !Ref BootstrapUserAccessKey
-          secretKey: !GetAtt BootstrapUserAccessKey.SecretAccessKey
-          buckets:
-            - !Ref BuildBucketName
+      # AWS::CloudFormation::Authentication:
+      #   S3AccessCreds:
+      #     type: S3
+      #     accessKeyId: !Ref BootstrapUserAccessKey
+      #     secretKey: !GetAtt BootstrapUserAccessKey.SecretAccessKey
+      #     buckets:
+      #       - !Ref BuildBucketName
 Parameters:
   BuildBucketName:
     Description: The name of the build bucket.
@@ -106,10 +177,20 @@ Parameters:
   ImageId:
     Description: The AMI to use to build the image.
     Type: String
+  KeyName:
+    Description: The key name to use to start the instance
+    Type: String
+    Default: ""
   BootstrapScriptPath:
     Description: The path to the script to run to bootstrap the image.
     Type: String
     Default: ""
+  LogGroup:
+    Description: The log group name
+    Type: String
+  LogGroupArn:
+    Description: The log group Arn
+    Type: String
 Outputs:
   BuildInstanceId:
     Description: The instance ID of the build instance.

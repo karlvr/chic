@@ -1,6 +1,8 @@
 # Chic
 
-A simple utility to create an AMI from a bootstrap shell script.
+A simple utility to create an AMI using a bootstrap shell script. This is an alternative to Packer.io.
+Chic uses CloudFormation to create and destroy resources, so it's always easy to manage the AWS resources
+that Chic creates.
 
 ## Options
 
