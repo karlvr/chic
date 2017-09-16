@@ -8,34 +8,24 @@ set -u
 name=
 instance_type=
 tags=
-quiet=0
 noninteractive=
-keypair=
 
 usage() {
 	echo "usage: $0 [-i <instance type>]" >&2
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
-	echo "          [-p <profile>] [-r <region>] [-k keypair]" >&2
-	echo "          [-f <config file>]" >&2
-	echo "          [-d] [-q] [-b] <basedir>" >&2
+	echo "          [-p <profile>] [-r <region>]" >&2
+	echo "          [-d] [-b] <basedir>" >&2
 	echo >&2
-	echo " -d Dry run" >&2
-	echo " -q Quiet" >&2
 	echo " -b Non-interactive mode" >&2
 }
 
 while getopts ":f:i:n:t:p:r:k:dqb" opt; do
 	case $opt in
-    	f)
-			set -a # So all variables set are exported for our template engine
-			source "$OPTARG"
-			set +a
-	      	;;
 		i)
 			instance_type="$OPTARG"
 			;;
 	    n)
-			name="$OPTARG"
+			tags="${tags:-} Key=Name,Value=\"$name\""
 			;;
 		t)
 			tag_key=$(echo "$OPTARG" | cut -d = -f 1)
@@ -48,15 +38,6 @@ while getopts ":f:i:n:t:p:r:k:dqb" opt; do
 		r)
 			region="$OPTARG"
 			;;
-		k)
-			keypair="$OPTARG"
-			;;
-	    d)
-			additional_aws_options="${additional_aws_options:-} --dry-run"
-			;;
-		q)
-			quiet=1
-			;;
 		b)
 			noninteractive=1
 			;;
@@ -65,10 +46,6 @@ while getopts ":f:i:n:t:p:r:k:dqb" opt; do
 	      	;;
 	esac
 done
-
-if [ ! -z "$name" ]; then
-	tags="${tags:-} Key=Name,Value=\"$name\""
-fi
 
 shift $((OPTIND-1))
 
@@ -92,6 +69,7 @@ echo "* Building bootstrap in $working_dir" >&2
 
 bootstrap_script=
 ami=
+ssh_username=
 
 COPY() {
 	source="${1:-}"
@@ -111,7 +89,7 @@ COPY() {
 		dest=$(echo "$dest" | cut -c2-)
 	done
 
-	echo "* Copying $source to $dest" >&2
+	echo "  * Copying $source to $dest" >&2
 
 	pushd "$base_dir" >/dev/null
 	if [ -d "$source" ]; then
@@ -129,14 +107,22 @@ COPY() {
 
 BOOTSTRAP() {
 	bootstrap_script="$1"
+	echo "  * Bootstrap script: $bootstrap_script"
 }
 
 FROM() {
 	ami="$1"
+	echo "  * Source AMI: $ami"
 }
 
 INSTANCE_TYPE() {
 	chicfile_instance_type="$1"
+	echo "  * Instance type: $chicfile_instance_type"
+}
+
+SSH_USERNAME() {
+	ssh_username="$1"
+	echo "  * SSH username: $ssh_username"
 }
 
 # Run Chicfile
@@ -146,6 +132,10 @@ if [ -z "$ami" ]; then
 	echo "Chicfile must contain FROM" >&2
 	exit 1
 fi
+if [ -z "$ssh_username" ]; then
+	echo "Chicfile must contain SSH_USERNAME" >&2
+	exit 1
+fi
 
 if [ -z "$instance_type" -a ! -z "${chicfile_instance_type:-}" ]; then
 	instance_type="$chicfile_instance_type"
@@ -153,7 +143,7 @@ fi
 
 # Create bootstrap archive
 archive=$(mktemp)
-pushd "$working_dir" > /dev/null && tar -czf "$archive" . && popd > /dev/null
+pushd "$working_dir" > /dev/null && tar -czf "$archive" * && popd > /dev/null
 
 date_stamp=$(date +%Y%m%d%H%M%S)
 
@@ -165,6 +155,37 @@ fi
 if [ ! -z "${region:-}" ]; then
 	global_aws_options="$global_aws_options --region $region"
 fi
+
+# Persistent configuration
+access_key=$(aws configure get aws_access_key_id $global_aws_options)
+if [ -z "$region" ]; then
+	region=$(aws configure get region $global_aws_options)
+fi
+
+conf_dir="$HOME/.chic/${access_key}/${region}"
+mkdir -p "$conf_dir"
+
+#username=$(aws iam get-user $global_aws_options --query User.UserName --output text)
+
+settings_file="$conf_dir/settings.sh"
+keypair_file="$conf_dir/keypair.pem"
+key_name=
+
+if [ -f "$settings_file" ]; then
+	. "$settings_file"
+fi
+
+if [ -z "$key_name" -o ! -f "$keypair_file" ]; then
+	key_name="chic-key-pair-${date_stamp}"
+	echo "* Creating keypair: $key_name" >&2
+	aws ec2 create-key-pair $global_aws_options --key-name "$key_name" --output text --query KeyMaterial > "$keypair_file"
+	chmod 600 "$keypair_file"
+	cat > "$settings_file" <<EOF
+key_name="$key_name"
+EOF
+fi
+
+my_public_ip=$(curl --silent http://checkip.amazonaws.com/)
 
 # Termination
 
@@ -181,22 +202,13 @@ terminate() {
 	unclean="${1:-}"
 
 	if [ ! -z "$unclean" -a -z "$noninteractive" ]; then
-		local delete_response=$(prompt_yn "Delete stacks")
+		local delete_response=$(prompt_yn "Delete stack")
 		if [ "$delete_response" == "n" ]; then
 			return 0
 		fi
 	fi
 
-	if [ ! -z "${bucket:-}" ]; then
-		echo "* Deleting bootstrap bucket..." >&2
-		aws s3 rm "s3://$bucket/" $global_aws_options \
-			--recursive --quiet
-	fi
-
-	echo "* Deleting stacks..." >&2
-	if [ ! -z "${init_stack_name:-}" ]; then
-		aws cloudformation delete-stack $global_aws_options --stack-name "$init_stack_name"
-	fi
+	echo "* Deleting stack..." >&2
 	if [ ! -z "${image_stack_name:-}" ]; then
 		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
 	fi
@@ -214,16 +226,6 @@ ctrl_c() {
 	terminate y
 	exit 1
 }
-
-# Build bootstrap
-init_stack_name="chic-init-${date_stamp}"
-
-echo "* Creating init stack: $init_stack_name" >&2
-aws cloudformation create-stack $global_aws_options \
-	--stack-name "$init_stack_name" \
-	--disable-rollback \
-	--template-body file://$(dirname $0)/lib/init.yml \
-	--capabilities CAPABILITY_IAM > /dev/null
 
 describe_stack_status() {
 	aws cloudformation describe-stacks $global_aws_options \
@@ -246,45 +248,11 @@ describe_stack_events() {
 		--query 'StackEvents[].[LogicalResourceId, ResourceStatus, ResourceType, ResourceStatusReason, Timestamp]'
 }
 
-stack_state=
-echo -n "* Waiting for init stack to complete" >&2
-while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
-	sleep 5
-	echo -n . >&2
-	stack_state=$(describe_stack_status "$init_stack_name")
-done
-echo >&2
-
-if [ "$stack_state" != "CREATE_COMPLETE" ]; then
-	echo "Unexpected init stack state: $stack_state" >&2
-
-	describe_stack_events "$init_stack_name"
-	terminate y
-	exit 1
-fi
-
-describe_stacks=$(describe_stack_outputs "$init_stack_name")
-
 extract_stack_output() {
 	echo "$describe_stacks" | grep "^$1\t" | cut -f2
 }
 
-bucket=$(extract_stack_output BucketName)
-log_group=$(extract_stack_output LogGroup)
-log_group_arn=$(extract_stack_output LogGroupArn)
-
-echo "* Created bucket: $bucket" >&2
-
-echo "* Uploading bootstrap" >&2
-set +e
-aws s3 cp "$archive" s3://$bucket/bootstrap.tar.gz $global_aws_options > /dev/null
-if [ $? != 0 ]; then
-	set -e
-	echo "Failed to upload bootstrap archive" >&2
-	terminate y
-	exit 1
-fi
-set -e
+# Build image
 
 image_stack_name="chic-image-${date_stamp}"
 
@@ -294,12 +262,11 @@ aws cloudformation create-stack $global_aws_options \
 	--template-body file://$(dirname $0)/lib/build-image.yml \
 	--capabilities CAPABILITY_IAM \
 	--disable-rollback \
-	--parameters ParameterKey=BuildBucketName,ParameterValue="$bucket" \
+	--parameters \
 	ParameterKey=ImageId,ParameterValue="$ami" \
 	ParameterKey=InstanceType,ParameterValue="${instance_type:-t2.micro}" \
-	ParameterKey=BootstrapScriptPath,ParameterValue="$bootstrap_script" \
-	ParameterKey=LogGroup,ParameterValue="$log_group" \
-	ParameterKey=LogGroupArn,ParameterValue="$log_group_arn" \
+	ParameterKey=KeyName,ParameterValue="$key_name" \
+	ParameterKey=SSHLocation,ParameterValue="$my_public_ip/32" \
 	> /dev/null
 
 stack_state=
@@ -316,40 +283,6 @@ if [ "$stack_state" != "CREATE_COMPLETE" ]; then
 
 	describe_stack_events "$image_stack_name"
 
-	if [ -z "$noninteractive" ]; then
-		# console_response=$(prompt_yn "View instance console")
-		# if [ "$console_response" == "y" ]; then
-		# 	instance_id=$(aws ec2 describe-instances $global_aws_options \
-		# 		--filters Name=tag:Name,Values="chic-image-builder-${image_stack_name}" \
-		# 		Name=instance-state-name,Values=running,pending \
-		# 		--output text \
-		# 		--query Reservations[].Instances[].InstanceId)
-		# 	if [ ! -z "$instance_id" ]; then
-		# 		aws ec2 get-console-output $global_aws_options --instance-id "$instance_id" --output text | ${PAGER:-less}
-		# 	else
-		# 		echo "InstanceId not found" >&2
-		# 	fi
-		# fi
-
-		# Logs
-		logfile=$(mktemp)
-		set +e
-		aws s3 cp s3://$bucket/logs/cfn-init.log "$logfile" --quiet $global_aws_options
-		if [ $? == 0 ]; then
-			log_response=
-			if [ -z "$noninteractive" ]; then
-				log_response=$(prompt_yn "View cfn-init.log")
-				if [ "$log_response" == "y" ]; then
-					${PAGER:-less} "$logfile"
-				fi
-			else
-				cat "$logfile" >&2
-			fi
-		fi
-		rm -f "$logfile"
-		set -e
-	fi
-
 	terminate y
 	exit 1
 fi
@@ -357,11 +290,29 @@ fi
 describe_stacks=$(describe_stack_outputs "$image_stack_name")
 
 instance_id=$(extract_stack_output BuildInstanceId)
+instance_public_ip=$(extract_stack_output BuildInstancePublicIp)
 if [ -z "$instance_id" ]; then
 	echo "Didn't get instance id from image stack" >&2
 	terminate y
 	exit 1
 fi
+
+# Run bootstrap
+#rsync -a -e "ssh -i \"$keypair_file\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" --rsync-path="sudo rsync" "$working_dir"/ $ssh_username@$instance_public_ip:/
+ssh_options="-i \"$keypair_file\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+scp $ssh_options "$archive" $ssh_username@$instance_public_ip:/tmp/bootstrap.tar.gz
+
+remote_commands="$(cat <<EOF
+set -e
+pushd /
+sudo tar zxf /tmp/bootstrap.tar.gz
+popd
+set +e
+$bootstrap_script
+EOF
+)"
+ssh -i "$keypair_file" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+	$ssh_username@$instance_public_ip "$remote_commands"
 
 echo "* Creating AMI" >&2
 new_ami_id=$(aws ec2 create-image $global_aws_options \

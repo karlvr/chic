@@ -4,3 +4,4 @@ COPY bootstrap.sh /opt/bootstrap.sh
 
 BOOTSTRAP /opt/bootstrap.sh
 INSTANCE_TYPE t2.medium
+SSH_USERNAME ubuntu
