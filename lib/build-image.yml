@@ -39,6 +39,12 @@ Resources:
                   - logs:DescribeLogStreams
                 Resource:
                   - !Ref LogGroupArn
+  BootstrapInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref BootstrapRole
   BuildVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -80,7 +86,7 @@ Resources:
       SecurityGroupIds:
         - !Ref SecurityGroup
       SubnetId: !Ref BuildSubnet
-      IamInstanceProfile: !Ref BootstrapRole
+      IamInstanceProfile: !Ref BootstrapInstanceProfile
       UserData:
         Fn::Base64:
           !Sub |
