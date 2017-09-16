@@ -189,8 +189,7 @@ terminate() {
 
 	if [ ! -z "${bucket:-}" ]; then
 		echo "* Deleting bootstrap bucket..." >&2
-		AWS_ACCESS_KEY_ID="$bucket_access_key" AWS_SECRET_ACCESS_KEY="$bucket_secret_access_key" \
-			aws s3 rm "s3://$bucket/" \
+		aws s3 rm "s3://$bucket/" $global_aws_options \
 			--recursive --quiet
 	fi
 
