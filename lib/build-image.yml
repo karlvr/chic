@@ -1,24 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
 Resources:
-  BootstrapRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      AssumeRolePolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - ec2.amazonaws.com
-            Action:
-              - sts:AssumeRole
-  BootstrapInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: /
-      Roles:
-        - !Ref BootstrapRole
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -43,7 +24,6 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub chic-image-builder-${AWS::StackName}
-      IamInstanceProfile: !Ref BootstrapInstanceProfile
       SecurityGroupIds:
         - !Ref SecurityGroup
       UserData:
