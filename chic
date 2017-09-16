@@ -308,11 +308,20 @@ pushd /
 sudo tar zxf /tmp/bootstrap.tar.gz
 popd
 set +e
-$bootstrap_script
+sudo $bootstrap_script
 EOF
 )"
+
+set +e
 ssh -i "$keypair_file" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
 	$ssh_username@$instance_public_ip "$remote_commands"
+if [ $? != 0 ]; then
+	echo "Failed to run bootstrap script" >&2
+	terminate y
+	exit 1
+fi
+
+set -e
 
 echo "* Creating AMI" >&2
 new_ami_id=$(aws ec2 create-image $global_aws_options \
