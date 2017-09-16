@@ -278,7 +278,7 @@ echo "* Created bucket: $bucket" >&2
 
 echo "* Uploading bootstrap" >&2
 set +e
-aws s3 cp "$archive" s3://$bucket/bootstrap.tar.gz $global_aws_options >&2
+aws s3 cp "$archive" s3://$bucket/bootstrap.tar.gz $global_aws_options > /dev/null
 if [ $? != 0 ]; then
 	set -e
 	echo "Failed to upload bootstrap archive" >&2
