@@ -218,9 +218,17 @@ if [ ! -z "${region:-}" ]; then
 fi
 
 # Persistent configuration
+set +e
 access_key=$(aws configure get aws_access_key_id $global_aws_options)
 if [ -z "$region" ]; then
 	region=$(aws configure get region $global_aws_options)
+fi
+set -e
+
+if [ -z "$region" ]; then
+	echo "Cannot determine region, either provide profile or region as command-line arguments" >&2
+	terminate
+	exit 1
 fi
 
 conf_dir="$HOME/.chic/${access_key}/${region}"
