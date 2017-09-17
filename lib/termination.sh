@@ -21,6 +21,10 @@ terminate() {
 	fi
 
 	deleteStacks
+
+	if [ ! -z "${known_hosts_file:-}" ]; then
+		rm -f "$known_hosts_file"
+	fi
 }
 
 trap ctrl_c INT
