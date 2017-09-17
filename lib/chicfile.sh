@@ -72,9 +72,12 @@ COPY() {
 	rsync -a -e "ssh $ssh_options" --rsync-path="sudo rsync" \
 		--exclude "**/.git*" --exclude "**/.hg*" --exclude "**/.DS_Store" \
 		"${@:1:$#-1}" $ssh_username@$instance_public_ip:"$dest" >&2
-	result=$?
-
-	return $result
+	if [ $? != 0 ]; then
+		echo "Failed to copy files to the remote instance" >&2
+		terminate y
+		exit 1
+	fi
+	set -e
 }
 
 RUN() {
@@ -90,5 +93,13 @@ RUN() {
 
 	# https://stackoverflow.com/a/26059282/1951952
 	[[ $# -gt 0 ]] && exec <<< "$@"
+
+	set +e
 	ssh -T $ssh_options $ssh_username@$instance_public_ip sudo -i >&2
+	if [ $? != 0 ]; then
+		echo "Failed to run commands on the remote instance" >&2
+		terminate y
+		exit 1
+	fi
+	set -e
 }
