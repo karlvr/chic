@@ -1,53 +1,6 @@
 #!/bin/bash -eu
 
-set +u
-profile="$CHIC_PROFILE"
-region="$CHIC_REGION"
-set -u
-
-name=
-instance_type=
-tags=
-noninteractive=
-
-usage() {
-	echo "usage: $0 [-i <instance type>]" >&2
-	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
-	echo "          [-p <profile>] [-r <region>]" >&2
-	echo "          [-d] [-b] <basedir>" >&2
-	echo >&2
-	echo " -b Non-interactive mode" >&2
-}
-
-while getopts ":f:i:n:t:p:r:k:dqb" opt; do
-	case $opt in
-		i)
-			instance_type="$OPTARG"
-			;;
-	    n)
-			tags="${tags:-} Key=Name,Value=\"$name\""
-			;;
-		t)
-			tag_key=$(echo "$OPTARG" | cut -d = -f 1)
-			tag_value=$(echo "$OPTARG" | cut -d = -f 2)
-			tags="${tags:-} Key=$tag_key,Value=\"$tag_value\""
-			;;
-		p)
-			profile="$OPTARG"
-			;;
-		r)
-			region="$OPTARG"
-			;;
-		b)
-			noninteractive=1
-			;;
-    	\?)
-	      	echo "Invalid option: -$OPTARG" >&2
-	      	;;
-	esac
-done
-
-shift $((OPTIND-1))
+. $(dirname $0)/lib/args.sh
 
 base_dir="${1:-}"
 if [ -z "$base_dir" ]; then
@@ -56,53 +9,13 @@ if [ -z "$base_dir" ]; then
 fi
 
 chicfile="$base_dir/Chicfile"
-
 if [ ! -f "$chicfile" ]; then
 	echo "Chicfile not found in $base_dir" >&2
 	exit 1
 fi
 
-# Termination
-
-prompt_yn() {
-	local prompt_message="$1"
-	local prompt_response=""
-	while [ "$prompt_response" != "y" -a "$prompt_response" != "n" ]; do
-		read -e -p "$prompt_message (y/n) " prompt_response
-	done
-	echo "$prompt_response"
-}
-
-terminate() {
-	unclean="${1:-}"
-
-	if [ ! -z "$unclean" -a -z "$noninteractive" ]; then
-		local delete_response=$(prompt_yn "Delete stack")
-		if [ "$delete_response" == "n" ]; then
-			return 0
-		fi
-	fi
-
-	if [ ! -z "${image_stack_name:-}" ]; then
-		echo "* Deleting stack..." >&2
-		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
-	fi
-
-	if [ ! -z "${archive:-}" ]; then
-		rm -f "$archive"
-	fi
-	if [ ! -z "${working_dir:-}" ]; then
-		rm -rf "$working_dir"
-	fi
-}
-
-trap ctrl_c INT
-
-ctrl_c() {
-	echo "* Cancelling" >&2
-	terminate y
-	exit 1
-}
+. $(dirname $0)/lib/termination.sh
+. $(dirname $0)/lib/aws-setup.sh
 
 # Build bootstrap
 
@@ -207,52 +120,6 @@ archive=$(mktemp)
 pushd "$working_dir" > /dev/null && tar -czf "$archive" * && popd > /dev/null
 
 date_stamp=$(date +%Y%m%d%H%M%S)
-
-# AWS configuration
-global_aws_options=
-if [ ! -z "${profile:-}" ]; then
-	global_aws_options="$global_aws_options --profile $profile"
-fi
-if [ ! -z "${region:-}" ]; then
-	global_aws_options="$global_aws_options --region $region"
-fi
-
-# Persistent configuration
-set +e
-access_key=$(aws configure get aws_access_key_id $global_aws_options)
-if [ -z "$region" ]; then
-	region=$(aws configure get region $global_aws_options)
-fi
-set -e
-
-if [ -z "$region" ]; then
-	echo "Cannot determine region, either provide profile or region as command-line arguments" >&2
-	terminate
-	exit 1
-fi
-
-conf_dir="$HOME/.chic/${access_key}/${region}"
-mkdir -p "$conf_dir"
-
-#username=$(aws iam get-user $global_aws_options --query User.UserName --output text)
-
-settings_file="$conf_dir/settings.sh"
-keypair_file="$conf_dir/keypair.pem"
-key_name=
-
-if [ -f "$settings_file" ]; then
-	. "$settings_file"
-fi
-
-if [ -z "$key_name" -o ! -f "$keypair_file" ]; then
-	key_name="chic-key-pair-${date_stamp}"
-	echo "* Creating keypair: $key_name" >&2
-	aws ec2 create-key-pair $global_aws_options --key-name "$key_name" --output text --query KeyMaterial > "$keypair_file"
-	chmod 600 "$keypair_file"
-	cat > "$settings_file" <<EOF
-key_name="$key_name"
-EOF
-fi
 
 my_public_ip=$(curl --silent http://checkip.amazonaws.com/)
 
