@@ -312,7 +312,9 @@ pushd /
 sudo tar zxfo /tmp/bootstrap.tar.gz
 popd
 set +e
-sudo $bootstrap_script
+if [ ! -z "$bootstrap_script" ]; then
+	sudo $bootstrap_script
+fi
 EOF
 )"
 
