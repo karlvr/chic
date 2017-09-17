@@ -305,7 +305,7 @@ scp $ssh_options "$archive" $ssh_username@$instance_public_ip:/tmp/bootstrap.tar
 remote_commands="$(cat <<EOF
 set -e
 pushd /
-sudo tar zxf /tmp/bootstrap.tar.gz
+sudo tar zxfo /tmp/bootstrap.tar.gz
 popd
 set +e
 sudo $bootstrap_script
