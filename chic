@@ -107,22 +107,22 @@ COPY() {
 
 BOOTSTRAP() {
 	bootstrap_script="$1"
-	echo "  * Bootstrap script: $bootstrap_script"
+	echo "  * Bootstrap script: $bootstrap_script" >&2
 }
 
 FROM() {
 	ami="$1"
-	echo "  * Source AMI: $ami"
+	echo "  * Source AMI: $ami" >&2
 }
 
 INSTANCE_TYPE() {
 	chicfile_instance_type="$1"
-	echo "  * Instance type: $chicfile_instance_type"
+	echo "  * Instance type: $chicfile_instance_type" >&2
 }
 
 SSH_USERNAME() {
 	ssh_username="$1"
-	echo "  * SSH username: $ssh_username"
+	echo "  * SSH username: $ssh_username" >&2
 }
 
 # Run Chicfile
@@ -314,7 +314,7 @@ EOF
 
 set +e
 ssh -i "$keypair_file" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-	$ssh_username@$instance_public_ip "$remote_commands"
+	$ssh_username@$instance_public_ip "$remote_commands" >&2
 if [ $? != 0 ]; then
 	echo "Failed to run bootstrap script" >&2
 	terminate y
