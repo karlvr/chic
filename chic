@@ -111,7 +111,7 @@ echo "* Building bootstrap in $working_dir" >&2
 
 bootstrap_script=
 ami=
-ssh_username=
+ssh_username=ubuntu
 
 COPY() {
 	local i
