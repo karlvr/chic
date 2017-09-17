@@ -158,8 +158,21 @@ FROM() {
 }
 
 INSTANCE_TYPE() {
-	chicfile_instance_type="$1"
-	echo "  * Instance type: $chicfile_instance_type" >&2
+	if [ -z "$instance_type" ]; then
+		instance_type="$1"
+		echo "  * Instance type: $instance_type" >&2
+	else
+		echo "  * Instance type: $instance_type [overriden]" >&2
+	fi
+}
+
+NAME() {
+	if [ -z "$name" ]; then
+		name="$1"
+		echo "  * Name: $name" >&2
+	else
+		echo "  * Name: $name [overriden]" >&2
+	fi
 }
 
 SSH_USERNAME() {
@@ -179,10 +192,6 @@ if [ -z "$ssh_username" ]; then
 	echo "Chicfile must contain SSH_USERNAME" >&2
 	terminate
 	exit 1
-fi
-
-if [ -z "$instance_type" -a ! -z "${chicfile_instance_type:-}" ]; then
-	instance_type="$chicfile_instance_type"
 fi
 
 # Create bootstrap archive
