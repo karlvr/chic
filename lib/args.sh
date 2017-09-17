@@ -14,12 +14,13 @@ usage() {
 	echo "usage: $0 [-i <instance type>]" >&2
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
 	echo "          [-p <profile>] [-r <region>]" >&2
+	echo "          [-s <existing image build stack>]" >&2
 	echo "          [-d] [-b] <basedir>" >&2
 	echo >&2
 	echo " -b Non-interactive mode" >&2
 }
 
-while getopts ":f:i:n:t:p:r:k:dqb" opt; do
+while getopts ":i:n:t:p:r:s:b" opt; do
 	case $opt in
 		i)
 			instance_type="$OPTARG"
@@ -37,6 +38,9 @@ while getopts ":f:i:n:t:p:r:k:dqb" opt; do
 			;;
 		r)
 			region="$OPTARG"
+			;;
+		s)
+			existing_image_stack_name="$OPTARG"
 			;;
 		b)
 			noninteractive=1

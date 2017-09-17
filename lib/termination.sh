@@ -20,17 +20,7 @@ terminate() {
 		fi
 	fi
 
-	if [ ! -z "${image_stack_name:-}" ]; then
-		echo "* Deleting stack..." >&2
-		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
-	fi
-
-	if [ ! -z "${archive:-}" ]; then
-		rm -f "$archive"
-	fi
-	if [ ! -z "${working_dir:-}" ]; then
-		rm -rf "$working_dir"
-	fi
+	deleteStacks
 }
 
 trap ctrl_c INT

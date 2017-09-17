@@ -45,3 +45,5 @@ if [ -z "$key_name" -o ! -f "$keypair_file" ]; then
 key_name="$key_name"
 EOF
 fi
+
+ssh_options="-i \"$keypair_file\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
