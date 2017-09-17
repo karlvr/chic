@@ -61,6 +61,14 @@ COPY() {
 
 	echo "  * Copying ${@:1:$#-1} to $dest" >&2
 	
+	set +e
+	if [[ "$dest" =~ /$ ]]; then
+		local dest_dir="$dest"
+	else
+		local dest_dir="$(dirname $dest)"
+	fi
+	ssh -T $ssh_options $ssh_username@$instance_public_ip sudo mkdir -p "$dest_dir" >&2
+
 	rsync -a -e "ssh $ssh_options" --rsync-path="sudo rsync" \
 		--exclude "**/.git*" --exclude "**/.hg*" --exclude "**/.DS_Store" \
 		"${@:1:$#-1}" $ssh_username@$instance_public_ip:"$dest" >&2
