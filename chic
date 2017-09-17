@@ -114,8 +114,16 @@ ami=
 ssh_username=
 
 COPY() {
-	source="${1:-}"
-	dest="${2:-}"
+	local i
+	local dest="${@:$#}"
+	for ((i=1; i<$#; i++)) {
+		COPY_ONE "${@:$i:1}" "$dest"
+	}
+}
+
+COPY_ONE() {
+	local source="${1:-}"
+	local dest="${2:-}"
 
 	if [ -z "$source" -o -z "$dest" ]; then
 		echo "usage: COPY <source> <dest>" >&2
