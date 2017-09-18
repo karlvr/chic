@@ -48,4 +48,4 @@ fi
 
 known_hosts_file="$conf_dir/known_hosts.$$"
 rm -f "$known_hosts_file"
-ssh_options="-i \"$keypair_file\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=\"$known_hosts_file\""
+ssh_options="-i $keypair_file -o StrictHostKeyChecking=no -o UserKnownHostsFile=$known_hosts_file"
