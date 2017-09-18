@@ -15,7 +15,7 @@ usage() {
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
 	echo "          [-p <profile>] [-r <region>]" >&2
 	echo "          [-s <existing image build stack>]" >&2
-	echo "          [-d] [-b] <basedir>" >&2
+	echo "          [-d] [-b] <basedir | Chicfile>" >&2
 	echo >&2
 	echo " -b Non-interactive mode" >&2
 }

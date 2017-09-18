@@ -8,9 +8,17 @@ if [ -z "$base_dir" ]; then
 	exit 1
 fi
 
-chicfile="$base_dir/Chicfile"
-if [ ! -f "$chicfile" ]; then
-	echo "Chicfile not found in $base_dir" >&2
+if [ -d "$base_dir" ]; then
+	chicfile="$base_dir/Chicfile"
+	if [ ! -f "$chicfile" ]; then
+		echo "Chicfile not found in $base_dir" >&2
+		exit 1
+	fi
+elif [ -f "$base_dir" ]; then
+	chicfile="$base_dir"
+	base_dir="$(dirname $base_dir)"
+else
+	echo "Base dir is not a directory: $base_dir" >&2
 	exit 1
 fi
 
