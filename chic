@@ -32,8 +32,11 @@ date_stamp=$(date +%Y%m%d%H%M%S)
 . "$(dirname $0)"/lib/image.sh
 
 # Run Chicfile
-echo "* Running Chicfile" >&2
-. "$chicfile"
+echo "* Running Chicfile: $chicfile" >&2
+
+pushd "$base_dir" >/dev/null
+. "$(basename $chicfile)"
+popd
 
 # Build image
 buildImage

@@ -76,6 +76,7 @@ COPY() {
 		terminate y
 		exit 1
 	fi
+
 	set -e
 }
 
