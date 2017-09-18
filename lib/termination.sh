@@ -13,7 +13,7 @@ prompt_yn() {
 terminate() {
 	unclean="${1:-}"
 
-	if [ ! -z "$unclean" -a -z "$noninteractive" ]; then
+	if [ ! -z "$unclean" -a -z "${existing_image_stack_name:-}" -a -z "$noninteractive" ]; then
 		local delete_response=$(prompt_yn "Delete stack")
 		if [ "$delete_response" == "n" ]; then
 			return 0
