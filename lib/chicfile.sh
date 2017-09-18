@@ -46,10 +46,9 @@ COPY() {
 		exit 1
 	fi
 
-	local source="${@:1:$#-1}"
 	local dest="${@:$#}"
 
-	if [ -z "$source" -o -z "$dest" ]; then
+	if [ $# -lt 2 ]; then
 		echo "usage: COPY <source> ... <dest>" >&2
 		return 1
 	fi
