@@ -13,7 +13,7 @@ buildImageStack() {
 	echo "* Creating image stack: $image_stack_name" >&2
 	aws cloudformation create-stack $global_aws_options \
 		--stack-name "$image_stack_name" \
-		--template-body file://$(dirname $0)/lib/build-image.yml \
+		--template-body file://$"$CHIC_LIB_DIR"/build-image.yml \
 		--capabilities CAPABILITY_IAM \
 		--disable-rollback \
 		--parameters \
