@@ -1,10 +1,24 @@
 #!/bin/bash -eu
 
-set +u
-profile="$CHIC_PROFILE"
-region="$CHIC_REGION"
-set -u
+findConfig() {
+	local search_dir="$PWD"
+	local config_file_name=".chic.cfg"
+	while [ ! -f "$search_dir/$config_file_name" -a "$search_dir" != "/" ]; do
+		search_dir="$(dirname $search_dir)"
+	done
 
+	if [ -f "$search_dir/$config_file_name" ]; then
+		echo "$search_dir/$config_file_name"
+	fi
+}
+
+config_file=$(findConfig)
+if [ ! -z "$config_file" ]; then
+	source "$config_file"
+fi
+
+profile="${CHIC_PROFILE:-}"
+region="${CHIC_REGION:-}"
 name=
 instance_type=
 tags=
