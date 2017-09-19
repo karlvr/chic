@@ -87,7 +87,7 @@ prompt_yn() {
 
 deleteStacks() {
 	prompt="${1:-}"
-	if [ ! -z "$prompt" -a -z "${existing_image_stack_name:-}" -a ! -z "${image_stack_name:-}" -a -z "$noninteractive" ]; then
+	if [ -t 0 -a ! -z "$prompt" -a -z "${existing_image_stack_name:-}" -a ! -z "${image_stack_name:-}" -a -z "$noninteractive" ]; then
 		local delete_response=$(prompt_yn "Delete stack")
 		if [ "$delete_response" == "n" ]; then
 			return 0
