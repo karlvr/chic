@@ -76,7 +76,24 @@ ensureNotStartedImageBuild() {
 	fi
 }
 
+prompt_yn() {
+	local prompt_message="$1"
+	local prompt_response=""
+	while [ "$prompt_response" != "y" -a "$prompt_response" != "n" ]; do
+		read -e -p "$prompt_message (y/n) " prompt_response
+	done
+	echo "$prompt_response"
+}
+
 deleteStacks() {
+	prompt="${1:-}"
+	if [ ! -z "$prompt" -a -z "${existing_image_stack_name:-}" -a ! -z "${image_stack_name:-}" -a -z "$noninteractive" ]; then
+		local delete_response=$(prompt_yn "Delete stack")
+		if [ "$delete_response" == "n" ]; then
+			return 0
+		fi
+	fi
+
 	if [ -z "${existing_image_stack_name:-}" -a ! -z "${image_stack_name:-}" ]; then
 		echo "* Deleting image stack..." >&2
 		aws cloudformation delete-stack $global_aws_options --stack-name "$image_stack_name"
