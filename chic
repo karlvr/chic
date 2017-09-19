@@ -37,7 +37,7 @@ echo "* Running Chicfile: $chicfile" >&2
 
 pushd "$base_dir" >/dev/null
 . "$(basename $chicfile)"
-popd
+popd >/dev/null
 
 # Build image
 buildImage
