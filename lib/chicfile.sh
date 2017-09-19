@@ -61,8 +61,10 @@ ENV() {
 	if [ -z "$current_value" ]; then
 		eval "$key"="$value"
 		environment="$environment $key=\"$value\""
+		echo "  * ENV: $key=$value" >&2
 	else
 		environment="$environment $key=\"$current_value\""
+		echo "  * ENV: $key=$current_value" >&2
 	fi
 }
 
