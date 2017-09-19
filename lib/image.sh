@@ -1,6 +1,8 @@
 #!/bin/bash -eu
 
 buildImage() {
+	ensureStartedImageBuild
+	
 	echo "* Creating AMI" >&2
 
 	if [ -z "${name:-}" ]; then
