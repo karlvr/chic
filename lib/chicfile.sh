@@ -2,6 +2,7 @@
 
 ami=
 ssh_username=ubuntu
+environment=
 
 FROM() {
 	ensureNotStartedImageBuild FROM
@@ -35,6 +36,34 @@ SSH_USERNAME() {
 
 	ssh_username="$1"
 	echo "  * SSH username: $ssh_username" >&2
+}
+
+ENV() {
+	local key="${1:-}"
+	local value="${2:-}"
+
+	if [ -z "$key" ]; then
+		echo "ENV <key> <value>" >&2
+		terminate
+		exit 1
+	fi
+
+	local caps_key
+	caps_key=$(echo "$key" | tr '[:lower:]' '[:upper:]')
+	if [ "$key" != "$caps_key" ]; then
+		echo "ENV variable names must be all caps: $key" >&2
+		terminate
+		exit 1
+	fi
+
+	local current_value
+	eval current_value=\${$key:-}
+	if [ -z "$current_value" ]; then
+		eval "$key"="$value"
+		environment="$environment $key=\"$value\""
+	else
+		environment="$environment $key=\"$current_value\""
+	fi
 }
 
 COPY() {
@@ -91,11 +120,20 @@ RUN() {
 
 	echo "  * RUN" >&2
 
-	# https://stackoverflow.com/a/26059282/1951952
-	[[ $# -gt 0 ]] && exec <<< "$@"
+	local input
+	if [ $# -gt 0 ]; then
+		input="$@"
+	elif [ ! -t 0 ]; then # Check that stdin isn't the terminal (ensure we have a here-doc)
+		input=$(cat)
+	else
+		input=
+	fi
+
+	local input_and_environment="$environment
+$input"
 
 	set +e
-	ssh -T $ssh_options $ssh_username@$instance_public_ip sudo -i >&2
+	ssh -T $ssh_options $ssh_username@$instance_public_ip sudo -i >&2 <<<"$input_and_environment"
 	if [ $? != 0 ]; then
 		echo "Failed to run commands on the remote instance" >&2
 		terminate y
