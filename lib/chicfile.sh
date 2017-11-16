@@ -1,7 +1,7 @@
 #!/bin/bash -eu
 
 ami=
-ssh_username=ubuntu
+ssh_username=
 environment=
 
 FROM() {
