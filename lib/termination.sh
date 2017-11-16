@@ -17,3 +17,11 @@ ctrl_c() {
 	terminate y
 	exit 1
 }
+
+trap 'error_trap ${LINENO}' ERR
+
+error_trap() {
+	echo "* Failed: exit status $?"
+	terminate y
+	exit 1
+}
