@@ -19,13 +19,14 @@ fi
 
 profile="${CHIC_PROFILE:-}"
 region="${CHIC_REGION:-}"
+ami=
 name=
 instance_type=
 tags=
 noninteractive=
 
 usage() {
-	echo "usage: $0 [-i <instance type>]" >&2
+	echo "usage: $0 [-a <ami>] [-i <instance type>]" >&2
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
 	echo "          [-p <profile>] [-r <region>]" >&2
 	echo "          [-s <existing image build stack>]" >&2
@@ -34,8 +35,11 @@ usage() {
 	echo " -b Non-interactive mode" >&2
 }
 
-while getopts ":i:n:t:p:r:s:b" opt; do
+while getopts ":a:i:n:t:p:r:s:b" opt; do
 	case $opt in
+		a)
+			ami="$OPTARG"
+			;;
 		i)
 			instance_type="$OPTARG"
 			;;

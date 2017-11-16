@@ -1,14 +1,17 @@
 #!/bin/bash -eu
 
-ami=
 ssh_username=
 environment=
 
 FROM() {
 	ensureNotStartedImageBuild FROM
 
-	ami="$1"
-	echo "  * Source AMI: $ami" >&2
+	if [ -z "$ami" ]; then
+		ami="$1"
+		echo "  * Source AMI: $ami" >&2
+	else
+		echo "  * Source AMI: $ami [overriden]" >&2
+	fi
 }
 
 INSTANCE_TYPE() {
