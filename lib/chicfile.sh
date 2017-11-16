@@ -31,6 +31,16 @@ NAME() {
 	fi
 }
 
+TAG() {
+	if [ -z "$1" -o -z "$2" ]; then
+		echo "TAG <key> <value>" &>2
+		terminate
+		exit 1
+	fi
+
+	tags="${tags:-} Key=$1,Value=\"$2\""
+}
+
 SSH_USERNAME() {
 	ensureNotStartedImageBuild SSH_USERNAME
 
