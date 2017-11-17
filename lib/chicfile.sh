@@ -7,8 +7,20 @@ FROM() {
 	ensureNotStartedImageBuild FROM
 
 	if [ -z "$ami" ]; then
-		ami="$1"
-		echo "  * Source AMI: $ami" >&2
+		if [[ "$1" =~ ^ami- ]]; then
+			ami="$1"
+			echo "  * Source AMI: $ami" >&2
+		else
+			echo "  * Searching for Source AMI: $*" >&2
+			eval "ami=\$(chic_find_image_$*)"
+			if [ -z "$ami" ]; then
+				echo "  * Cannot find Source AMI for search query" >&2
+				terminate y
+				exit 1
+			else
+				echo "  * Source AMI: $ami" >&2
+			fi
+		fi
 	else
 		echo "  * Source AMI: $ami [overriden]" >&2
 	fi

@@ -15,6 +15,7 @@ so you can use shell scripting in the Chicfile. Note that the Chicfile is execut
 machine, unless you're using a `RUN` command to execute on the remote machine building the image.
 
 * `FROM <ami>` The AMI to use as the base for the image.
+* `FROM <distro> <queries> Search for latest AMI from a supported distro, see below.
 * `INSTANCE_TYPE <instance type>` The instance type to use to build the image, defaults to `t2.micro`
 * `NAME <name>` The name to give to the resulting image
 * `TAG <name> <value>` A tag to create on the resulting image. This command can be used multiple times.
@@ -30,6 +31,23 @@ Environment variables are made available to scripts executing on the remote serv
 
 You must specify environment variables in the Chicfile using the `ENV` command. This also specifies
 the default value for the environment variable.
+
+### Distros
+
+The supported distros are:
+
+* `ubuntu`
+
+After the distro name you may include filters to narrow down the image, including:
+
+* `release` e.g. `xenial`
+* `architecture` defaults to `x86_64`
+* `root_device_type` defaults to `ebs`
+* `image_type` defaults to `machine`
+* `hypervisor` defaults to `xen`
+* `virtualization_type` defaults to `hvm`
+* `volume_type` e.g. `gp2`
+* `owner` defaults to official owner for the distro
 
 ### Example
 
@@ -50,6 +68,12 @@ RUN_EOF
 
 Note that the default value of the environment variable `MY_STAGE` is set to `production`, but you could
 override this by setting the `MY_STAGE` environment variable before running chic, e.g. `MY_STAGE=staging chic .`
+
+And an example of a Chicfile that searches for the AMI:
+
+```
+FROM ubuntu release=xenial
+```
 
 ## Options
 
