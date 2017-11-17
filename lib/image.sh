@@ -1,7 +1,38 @@
 #!/bin/bash -eu
 
+describe_instance_status() {
+	local instance_id
+	instance_id="$1"
+
+	aws ec2 describe-instances $global_aws_options --instance-ids "$instance_id" \
+		--output text --query Reservations[0].Instances[0].State.Name
+}
+
+waitForInstanceStopped() {
+	local instance_id
+	instance_id="$1"
+
+	local instance_state
+	instance_state=$(describe_instance_status $instance_id)
+
+	if [ -z "$instance_state" -o "$instance_state" != "stopped" ]; then
+		echo -n "* Waiting for instance to stop: $instance_id" >&2
+		while [ -z "$instance_state" -o "$instance_state" != "stopped" ]; do
+			sleep 5
+			echo -n . >&2
+			instance_state=$(describe_instance_status "$instance_id")
+		done
+		echo >&2
+	fi
+}
+
 buildImage() {
 	ensureStartedImageBuild
+
+	echo "* Stopping image build instance" >&2
+	aws ec2 stop-instances $global_aws_options \
+		--instance-id $instance_id >/dev/null
+	waitForInstanceStopped $instance_id
 	
 	echo "* Creating AMI" >&2
 
