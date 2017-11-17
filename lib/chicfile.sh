@@ -53,10 +53,10 @@ SSH_USERNAME() {
 
 ENV() {
 	local key="${1:-}"
-	local value="${2:-}"
+	local value="${2:-CHIC_NO_VALUE_SENTINEL}"
 
 	if [ -z "$key" ]; then
-		echo "ENV <key> <value>" >&2
+		echo "ENV <key> [<value>]" >&2
 		terminate
 		exit 1
 	fi
@@ -72,12 +72,26 @@ ENV() {
 	local current_value
 	eval current_value=\${$key:-}
 	if [ -z "$current_value" ]; then
+		if [ "$value" == "CHIC_NO_VALUE_SENTINEL" ]; then
+			echo "ENV $key does not have a value or a default value" >&2
+			terminate
+			exit 1
+		fi
+
 		eval "$key"="$value"
 		environment="$environment $key=\"$value\""
-		echo "  * ENV: $key=$value" >&2
+		if [[ "$key" =~ PASSWORD ]]; then
+			echo "  * ENV: $key=[REDACTED]" >&2
+		else
+			echo "  * ENV: $key=$value" >&2
+		fi
 	else
 		environment="$environment $key=\"$current_value\""
-		echo "  * ENV: $key=$current_value" >&2
+		if [[ "$key" =~ PASSWORD ]]; then
+			echo "  * ENV: $key=[REDACTED]" >&2
+		else
+			echo "  * ENV: $key=$current_value" >&2
+		fi
 	fi
 }
 
