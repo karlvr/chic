@@ -33,9 +33,11 @@ usage() {
 	echo "          [-b] <basedir | Chicfile>" >&2
 	echo >&2
 	echo " -b Non-interactive mode" >&2
+	echo >&2
+	echo "usage: $0 -v" >&2
 }
 
-while getopts ":a:i:n:t:p:r:s:b" opt; do
+while getopts ":a:i:n:t:p:r:s:bv" opt; do
 	case $opt in
 		a)
 			ami="$OPTARG"
@@ -62,6 +64,10 @@ while getopts ":a:i:n:t:p:r:s:b" opt; do
 			;;
 		b)
 			noninteractive=1
+			;;
+		v)
+			echo "chic $CHIC_VERSION"
+			exit 0
 			;;
     	\?)
 	      	echo "Invalid option: -$OPTARG" >&2
