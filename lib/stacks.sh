@@ -30,16 +30,26 @@ waitForStack() {
 	local stack
 	stack="$1"
 
-	local stack_state
-	stack_state=$(describe_stack_status "$stack")
+	local safe_stack
+	safe_stack=$(echo "$stack" | tr -- '- ' _ | tr -C -d [:alnum:]_)
 
-	echo -n "* Waiting for stack to complete: $stack" >&2
-	while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
-		sleep 5
-		echo -n . >&2
+	local stack_state
+	eval stack_state=\${global_stack_state_$safe_stack:-}
+	if [ -z "$stack_state" ]; then
 		stack_state=$(describe_stack_status "$stack")
-	done
-	echo >&2
+	fi
+
+	if [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; then
+		echo -n "* Waiting for stack to complete: $stack" >&2
+		while [ -z "$stack_state" -o "$stack_state" == "CREATE_IN_PROGRESS" ]; do
+			sleep 5
+			echo -n . >&2
+			stack_state=$(describe_stack_status "$stack")
+		done
+		echo >&2
+	fi
+
+	eval "global_stack_state_$safe_stack"="$stack_state"
 
 	echo "$stack_state"
 }
