@@ -189,3 +189,16 @@ $input"
 	fi
 	set -e
 }
+
+MANUAL() {
+	ensureStartedImageBuild
+
+	set +e
+	ssh -t $ssh_options $ssh_username@$instance_public_ip
+	if [ $? != 0 ]; then
+		echo "Failed to run commands on the remote instance" >&2
+		terminate y
+		exit 1
+	fi
+	set -e
+}

@@ -23,6 +23,7 @@ machine, unless you're using a `RUN` command to execute on the remote machine bu
 * `ENV <key> [<value>]` Set an environment variable default in the Chicfile. If a value is not specified then one MUST be provided in the environment or config file when chic is run. This command can be used multiple times.
 * `COPY <source> ... <dest>` Copy a file from the local machine to the remote machine. This command can have multiple source arguments, and can be used multiple times.
 * `RUN <command>` Run the given command on the remote machine. This command can be used multiple times, and can also accept its commands on stdin so can be used with heredocs.
+* `MANUAL` run an interactive ssh session with the builder image, so you can poke around.
 
 ### Environment variables
 
