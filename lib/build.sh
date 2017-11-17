@@ -28,7 +28,7 @@ waitForImageStack() {
 	set +e
 	waitForCompleteStack "$image_stack_name"
 	if [ $? != 0 ]; then
-		describe_stack_events "$stack"
+		describe_stack_events "$image_stack_name"
 		terminate y
 		exit 1
 	fi
