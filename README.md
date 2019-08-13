@@ -17,6 +17,7 @@ machine, unless you're using a `RUN` command to execute on the remote machine bu
 * `FROM <ami>` The AMI to use as the base for the image.
 * `FROM <distro> <queries> Search for latest AMI from a supported distro, see below.
 * `INSTANCE_TYPE <instance type>` The instance type to use to build the image, defaults to `t2.micro`
+* `VOLUME [name=<device name>] [size=<size in GB>]` Configure the root volume. Any values not specified are derived from the source AMI.
 * `NAME <name>` The name to give to the resulting image
 * `TAG <name> <value>` A tag to create on the resulting image. This command can be used multiple times.
 * `SSH_USERNAME <username>` The username to connect to the image builder for ssh

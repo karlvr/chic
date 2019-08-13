@@ -2,6 +2,8 @@
 
 ssh_username=
 environment=
+root_volume_device_name=
+root_volume_size=
 
 FROM() {
 	ensureNotStartedImageBuild FROM
@@ -35,6 +37,39 @@ INSTANCE_TYPE() {
 	else
 		echo "  * Instance type: $instance_type [overriden]" >&2
 	fi
+}
+
+VOLUME() {
+	ensureNotStartedImageBuild VOLUME
+
+	local option
+	for option in $* ; do
+		local option_key
+		local option_value
+		option_key=$(echo "$option" | cut -d= -f1)
+		option_value=$(echo "$option" | cut -d= -f2)
+
+
+		if [ "$option_key" == "name" ]; then
+			if [ -z "$root_volume_device_name" ]; then
+				root_volume_device_name="$option_value"
+				echo "  * Volume: name=$root_volume_device_name" >&2
+			else
+				echo "  * Volume: name=$root_volume_device_name [overriden]" >&2
+			fi
+		elif [ "$option_key" == "size" ]; then
+			if [ -z "$root_volume_size" ]; then
+				root_volume_size="$option_value"
+				echo "  * Volume: size=${root_volume_size}GB" >&2
+			else
+				echo "  * Volume: size=${root_volume_size}GB [overriden]" >&2
+			fi
+		else
+			echo "  * VOLUME: Unsupported option: $option" >&2
+			terminate
+			exit 1
+		fi
+	done
 }
 
 NAME() {

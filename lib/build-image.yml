@@ -26,6 +26,10 @@ Resources:
           Value: !Sub chic-image-builder-${AWS::StackName}
       SecurityGroupIds:
         - !Ref SecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: !Ref RootVolumeDeviceName
+          Ebs:
+            VolumeSize: !Ref RootVolumeSize
       UserData:
         Fn::Base64:
           !Sub |
@@ -52,6 +56,12 @@ Parameters:
     Description: The IP address range that can be used to SSH to the instance
     Type: String
     Default: 0.0.0.0/0
+  RootVolumeDeviceName:
+    Description: The device name of the root volume
+    Type: String
+  RootVolumeSize:
+    Description: The size of the root volume in GB
+    Type: String
 Outputs:
   BuildInstanceId:
     Description: The instance ID of the build instance.

@@ -7,6 +7,15 @@ buildImageStack() {
 		exit 1
 	fi
 
+	if [ -z "$root_volume_device_name" ]; then
+		root_volume_device_name=$(aws ec2 describe-images $global_aws_options --image-ids "$ami" --output text --query 'Images[].BlockDeviceMappings[0].DeviceName')
+		echo "  * Determined root volume: $root_volume_device_name" >&2
+	fi
+	if [ -z "$root_volume_size" ]; then
+		root_volume_size=$(aws ec2 describe-images $global_aws_options --image-ids "$ami" --output text --query 'Images[].BlockDeviceMappings[0].Ebs.VolumeSize')
+		echo "  * Determined root volume size: ${root_volume_size}GB" >&2
+	fi
+
 	image_stack_name="chic-image-$date_stamp"
 	local my_public_ip=$(curl --silent http://checkip.amazonaws.com/)
 
@@ -21,6 +30,8 @@ buildImageStack() {
 		ParameterKey=InstanceType,ParameterValue="${instance_type:-t2.micro}" \
 		ParameterKey=KeyName,ParameterValue="$key_name" \
 		ParameterKey=SSHLocation,ParameterValue="$my_public_ip/32" \
+		ParameterKey=RootVolumeDeviceName,ParameterValue="$root_volume_device_name" \
+		ParameterKey=RootVolumeSize,ParameterValue="$root_volume_size" \
 		> /dev/null
 }
 
