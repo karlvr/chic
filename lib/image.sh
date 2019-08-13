@@ -111,7 +111,7 @@ chic_find_image() {
 		elif [ "$option_key" == "release" ]; then
 			release="$option_value"
 		else
-			echo "  * chic_find_image_ubuntu: Unsupported filter option: $option" >&2
+			echo "  * chic_find_image: Unsupported filter option: $option" >&2
 			return 0
 		fi
 	done
