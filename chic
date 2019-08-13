@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 
-CHIC_VERSION=1.6
+CHIC_VERSION=1.8.1
 CHIC_LIB_DIR="$(dirname $0)/lib"
 . "$CHIC_LIB_DIR"/args.sh
 
