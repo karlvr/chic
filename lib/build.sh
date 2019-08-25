@@ -59,10 +59,12 @@ waitForImageStack() {
 
 	local describe_stacks=$(describe_stack_outputs "$image_stack_name")
 
-	instance_id=$(extract_stack_output BuildInstanceId)
-	instance_public_ip=$(extract_stack_output BuildInstancePublicIp)
+	instance_id=$(extract_stack_output BuildInstanceId "$describe_stacks")
+	instance_public_ip=$(extract_stack_output BuildInstancePublicIp "$describe_stacks")
 	if [ -z "$instance_id" ]; then
 		echo "Didn't get instance id from image stack" >&2
+		echo "CloudFormation stack output:" >&2
+		echo "$describe_stacks" >&2
 		terminate y
 		exit 1
 	fi

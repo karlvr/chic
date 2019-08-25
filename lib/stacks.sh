@@ -23,7 +23,7 @@ describe_stack_events() {
 
 extract_stack_output() {
 	# TODO get the describe_stacks as a heredoc / here-string
-	echo "$describe_stacks" | grep "^$1\t" | cut -f2
+	echo "$2" | grep "^$1\t" | cut -f2
 }
 
 waitForStack() {
