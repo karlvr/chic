@@ -1,7 +1,13 @@
 #!/bin/bash -eu
 
+dirrealpath() {
+	local dir="$1"
+	(cd "$dir" && pwd)
+}
+
 CHIC_VERSION=1.8.1
-CHIC_LIB_DIR="$(dirname $0)/lib"
+# Convert CHIC_LIB_DIR to an absolute path as we use it in file:// which doesn't support relative paths
+CHIC_LIB_DIR="$(dirrealpath $(dirname $0))/lib"
 . "$CHIC_LIB_DIR"/args.sh
 
 base_dir="${1:-}"
