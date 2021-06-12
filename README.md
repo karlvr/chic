@@ -83,7 +83,6 @@ The following command-line options control chic:
 
 * `-p <profile>` The awscli configuration profile to use to access AWS
 * `-r <region>` The AWS region to use to build the image (defaults to the default region for your awscli profile)
-* `-s <subnet>` The AWS subnet to use to build the image (defaults to the first subnet found)
 * `-b` Non-interactive mode
 
 The following command-line options are supported to override Chicfile settings:
