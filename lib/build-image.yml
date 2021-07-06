@@ -14,9 +14,6 @@ Resources:
           Value: !Sub chic-security-group-${AWS::StackName}
   BuildInstance:
     Type: AWS::EC2::Instance
-    CreationPolicy:
-      ResourceSignal:
-        Timeout: PT60M
     Properties:
       InstanceType: !Ref InstanceType
       ImageId: !Ref ImageId
@@ -30,16 +27,6 @@ Resources:
         - DeviceName: !Ref RootVolumeDeviceName
           Ebs:
             VolumeSize: !Ref RootVolumeSize
-      UserData:
-        Fn::Base64:
-          !Sub |
-            #!/bin/bash -x
-            apt-get update
-            apt-get install -y python-pip
-            #pip install --upgrade pip
-            pip install https://s3.amazonaws.com/cloudformation-examples/aws-cfn-bootstrap-latest.tar.gz
-            #cfn-init -v --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region} --configsets install
-            cfn-signal -e $? --resource BuildInstance --stack ${AWS::StackName} --region ${AWS::Region}
 Parameters:
   InstanceType:
     Description: The instance type to use to build the image.

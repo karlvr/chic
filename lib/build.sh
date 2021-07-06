@@ -70,6 +70,26 @@ waitForImageStack() {
 	fi
 }
 
+waitForPort() {
+	local port="$1"
+	set +e
+
+	echo -n "* Waiting for port $port to be available: $instance_public_ip" >&2
+	local success=
+	while [ -z "$success" ]; do
+		nc -z -G 5 "$instance_public_ip" "$port" 2>/dev/null
+		if [ $? == 0 ]; then
+			success=1
+		else
+			sleep 5
+			echo -n . >&2
+		fi
+	done
+	echo >&2
+
+	set -e
+}
+
 ensureStartedImageBuild() {
 	if [ -z "${image_stack_name:-}" ]; then
 		if [ ! -z "${existing_image_stack_name:-}" ]; then
@@ -78,6 +98,7 @@ ensureStartedImageBuild() {
 			buildImageStack
 		fi
 		waitForImageStack
+		waitForPort 22
 	fi
 }
 
