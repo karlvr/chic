@@ -150,6 +150,22 @@ ENV() {
 }
 
 COPY() {
+	local chown=
+	while getopts ":o:" opt; do
+		case $opt in
+			o)
+				chown="$OPTARG"
+				;;
+			\?)
+				echo "Invalid option: -$OPTARG" >&2
+				terminate y
+				exit 1
+				;;
+		esac
+	done
+
+	shift $((OPTIND-1))
+
 	ensureStartedImageBuild
 
 	if [ -z "$ssh_username" ]; then
@@ -180,7 +196,11 @@ COPY() {
 	fi
 	ssh -T $ssh_options $ssh_username@$instance_public_ip sudo mkdir -p "$dest_dir" >&2
 
-	rsync -a -e "ssh $ssh_options" --rsync-path="sudo rsync" \
+	local rsync_options=
+	if [ -n "$chown" ]; then
+		rsync_options=--chown="$chown"
+	fi
+	rsync -rlptD -e "ssh $ssh_options" --rsync-path="sudo rsync" $rsync_options \
 		--exclude "**/.git*" --exclude "**/.hg*" --exclude "**/.DS_Store" \
 		"${@:1:$#-1}" $ssh_username@$instance_public_ip:"$dest" >&2
 	if [ $? != 0 ]; then

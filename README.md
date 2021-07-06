@@ -22,7 +22,7 @@ machine, unless you're using a `RUN` command to execute on the remote machine bu
 * `TAG <name> <value>` A tag to create on the resulting image. This command can be used multiple times.
 * `SSH_USERNAME <username>` The username to connect to the image builder for ssh
 * `ENV <key> [<value>]` Set an environment variable default in the Chicfile. If a value is not specified then one MUST be provided in the environment or config file when chic is run. This command can be used multiple times.
-* `COPY <source> ... <dest>` Copy a file from the local machine to the remote machine. This command can have multiple source arguments, and can be used multiple times.
+* `COPY [-o <user:group>] <source> ... <dest>` Copy a file from the local machine to the remote machine. This command can have multiple source arguments, and can be used multiple times. Files and directories are copied owned by `root` and group `root`, or you can use the `-o` switch to specify the user and group.
 * `RUN <command>` Run the given command on the remote machine. This command can be used multiple times, and can also accept its commands on stdin so can be used with heredocs.
 * `MANUAL` run an interactive ssh session with the builder image, so you can poke around.
 
