@@ -27,7 +27,7 @@ buildImageStack() {
 		--disable-rollback \
 		--parameters \
 		ParameterKey=ImageId,ParameterValue="$ami" \
-		ParameterKey=InstanceType,ParameterValue="${instance_type:-t2.micro}" \
+		ParameterKey=InstanceType,ParameterValue="${instance_type:-t3a.small}" \
 		ParameterKey=KeyName,ParameterValue="$key_name" \
 		ParameterKey=SSHLocation,ParameterValue="$my_public_ip/32" \
 		ParameterKey=RootVolumeDeviceName,ParameterValue="$root_volume_device_name" \
