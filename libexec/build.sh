@@ -71,18 +71,28 @@ waitForImageStack() {
 }
 
 waitForPort() {
-	local port="$1"
+	local host="$1"
+	local port="$2"
 	set +e
+	set -o pipefail
 
-	echo -n "* Waiting for port $port to be available: $instance_public_ip" >&2
+	local netcat_options="-z -G 5 -w 5"
+
+	echo -n "* Waiting for port $port to be available: $host" >&2
 	local success=
+	local output=
 	while [ -z "$success" ]; do
-		nc -z -G 5 "$instance_public_ip" "$port" 2>/dev/null
+		output=$(nc $netcat_options "$host" "$port" 2>&1)
 		if [ $? == 0 ]; then
 			success=1
 		else
-			sleep 5
-			echo -n . >&2
+			echo "$output" | grep "invalid option" >/dev/null
+			if [ $? == 0 -a "$netcat_options" == "-z -G 5 -w 5" ]; then
+				netcat_options="-z -w 5"
+			else
+				sleep 5
+				echo -n . >&2
+			fi
 		fi
 	done
 	echo >&2
@@ -98,7 +108,7 @@ ensureStartedImageBuild() {
 			buildImageStack
 		fi
 		waitForImageStack
-		waitForPort 22
+		waitForPort "$instance_public_ip" 22
 	fi
 }
 
