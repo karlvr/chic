@@ -14,9 +14,14 @@ The Chicfile is intentionally quite similar to a Dockerfile. It is, however, a s
 so you can use shell scripting in the Chicfile. Note that the Chicfile is executed on your local
 machine, unless you're using a `RUN` command to execute on the remote machine building the image.
 
+### Required
+
 * `FROM <ami>` The AMI to use as the base for the image.
-* `FROM <distro> <queries> Search for latest AMI from a supported distro, see below.
-* `INSTANCE_TYPE <instance type>` The instance type to use to build the image, defaults to `t3a.small`
+* `FROM <distro> <queries>` Search for latest AMI from a supported distro, see below.
+* `INSTANCE_TYPE <instance type>` The instance type to use to build the image.
+
+### Optional
+
 * `VOLUME [name=<device name>] [size=<size in GB>]` Configure the root volume. Any values not specified are derived from the source AMI.
 * `NAME <name>` The name to give to the resulting image
 * `TAG <name> <value>` A tag to create on the resulting image. This command can be used multiple times.

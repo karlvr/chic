@@ -6,6 +6,11 @@ buildImageStack() {
 		terminate
 		exit 1
 	fi
+	if [ -z "$instance_type" ]; then
+		echo "Chicfile must contain INSTANCE_TYPE before any image manipulation functions" >&2
+		terminate
+		exit 1
+	fi
 
 	if [ -z "$root_volume_device_name" ]; then
 		root_volume_device_name=$(aws ec2 describe-images $global_aws_options --image-ids "$ami" --output text --query 'Images[].BlockDeviceMappings[0].DeviceName')
@@ -27,7 +32,7 @@ buildImageStack() {
 		--disable-rollback \
 		--parameters \
 		ParameterKey=ImageId,ParameterValue="$ami" \
-		ParameterKey=InstanceType,ParameterValue="${instance_type:-t3a.small}" \
+		ParameterKey=InstanceType,ParameterValue="${instance_type}" \
 		ParameterKey=KeyName,ParameterValue="$key_name" \
 		ParameterKey=SSHLocation,ParameterValue="$my_public_ip/32" \
 		ParameterKey=RootVolumeDeviceName,ParameterValue="$root_volume_device_name" \
