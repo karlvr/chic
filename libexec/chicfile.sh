@@ -14,7 +14,10 @@ FROM() {
 			echo "  * Source AMI: $ami" >&2
 		else
 			echo "  * Searching for Source AMI: $*" >&2
-			eval "ami=\$(chic_find_image_$*)"
+			local distro="$1"
+			shift
+			
+			eval "ami=\$(chic_find_image_$distro \"$@\")"
 			if [ -z "$ami" ]; then
 				echo "  * Cannot find Source AMI for search query" >&2
 				terminate y

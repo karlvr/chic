@@ -89,7 +89,7 @@ chic_find_image() {
 	local tag_filters=
 
 	local option
-	for option in $* ; do
+	for option in "$@" ; do
 		local option_key
 		local option_value
 		option_key=$(echo "$option" | cut -d= -f1)
@@ -112,7 +112,7 @@ chic_find_image() {
 		elif [ "$option_key" == "release" ]; then
 			release="$option_value"
 		elif [[ "$option_key" =~ ^tag: ]]; then
-			tag_filters="$tag_filters Name=$option_key,Values=\"$option_value\""
+			tag_filters="$tag_filters \"Name=$option_key,Values=$option_value\""
 		else
 			echo "  * chic_find_image: Unsupported filter option: $option" >&2
 			return 0
@@ -122,32 +122,32 @@ chic_find_image() {
 	local filters=
 
 	if [ ! -z "$architecture" ]; then
-		filters="$filters Name=architecture,Values=$architecture"
+		filters="$filters \"Name=architecture,Values=$architecture\""
 	fi
 	if [ ! -z "$root_device_type" ]; then
-		filters="$filters Name=root-device-type,Values=$root_device_type"
+		filters="$filters \"Name=root-device-type,Values=$root_device_type\""
 	fi
 	if [ ! -z "$image_type" ]; then
-		filters="$filters Name=image-type,Values=$image_type"
+		filters="$filters \"Name=image-type,Values=$image_type\""
 	fi
 	if [ ! -z "$hypervisor" ]; then
-		filters="$filters Name=hypervisor,Values=$hypervisor"
+		filters="$filters \"Name=hypervisor,Values=$hypervisor\""
 	fi
 	if [ ! -z "$virtualization_type" ]; then
-		filters="$filters Name=virtualization-type,Values=$virtualization_type"
+		filters="$filters \"Name=virtualization-type,Values=$virtualization_type\""
 	fi
 	if [ ! -z "$volume_type" ]; then
-		filters="$filters Name=block-device-mapping.volume-type,Values=$volume_type"
+		filters="$filters \"Name=block-device-mapping.volume-type,Values=$volume_type\""
 	fi
 	if [ ! -z "$release" ]; then
-		filters="$filters Name=name,Values=ubuntu/images/*$release*"
+		filters="$filters \"Name=name,Values=ubuntu/images/*$release*\""
 	fi
 	if [ ! -z "$tag_filters" ]; then
 		filters="$filters $tag_filters"
 	fi
 
 	# Find AMI
-	aws ec2 describe-images $global_aws_options \
+	eval aws ec2 describe-images $global_aws_options \
 		--filters $filters \
 		--owners "$owner" \
 		--output text --query 'Images[].[ImageId,CreationDate,Name,Description]' \
@@ -156,9 +156,9 @@ chic_find_image() {
 
 chic_find_image_ubuntu() {
 	# Use official Canonical owner id
-	chic_find_image owner=099720109477 $*
+	chic_find_image owner=099720109477 "$@"
 }
 
 chic_find_image_self() {
-	chic_find_image owner=self $*
+	chic_find_image owner=self "$@"
 }
