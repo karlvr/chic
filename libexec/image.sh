@@ -86,6 +86,7 @@ chic_find_image() {
 	local virtualization_type=hvm
 	local volume_type=
 	local release=
+	local tag_filters=
 
 	local option
 	for option in $* ; do
@@ -110,6 +111,8 @@ chic_find_image() {
 			volume_type="$option_value"
 		elif [ "$option_key" == "release" ]; then
 			release="$option_value"
+		elif [[ "$option_key" =~ ^tag: ]]; then
+			tag_filters="$tag_filters Name=$option_key,Values=\"$option_value\""
 		else
 			echo "  * chic_find_image: Unsupported filter option: $option" >&2
 			return 0
@@ -139,6 +142,9 @@ chic_find_image() {
 	if [ ! -z "$release" ]; then
 		filters="$filters Name=name,Values=ubuntu/images/*$release*"
 	fi
+	if [ ! -z "$tag_filters" ]; then
+		filters="$filters $tag_filters"
+	fi
 
 	# Find AMI
 	aws ec2 describe-images $global_aws_options \
@@ -151,4 +157,8 @@ chic_find_image() {
 chic_find_image_ubuntu() {
 	# Use official Canonical owner id
 	chic_find_image owner=099720109477 $*
+}
+
+chic_find_image_self() {
+	chic_find_image owner=self $*
 }

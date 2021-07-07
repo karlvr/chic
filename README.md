@@ -18,6 +18,7 @@ machine, unless you're using a `RUN` command to execute on the remote machine bu
 
 * `FROM <ami>` The AMI to use as the base for the image.
 * `FROM <distro> <queries>` Search for latest AMI from a supported distro, see below.
+* `FROM self <queries>` Search your own AMIs.
 * `INSTANCE_TYPE <instance type>` The instance type to use to build the image.
 
 ### Optional
@@ -47,14 +48,15 @@ The supported distros are:
 
 After the distro name you may include filters to narrow down the image, including:
 
-* `release` e.g. `xenial`
-* `architecture` defaults to `x86_64`
-* `root_device_type` defaults to `ebs`
-* `image_type` defaults to `machine`
-* `hypervisor` defaults to `xen`
-* `virtualization_type` defaults to `hvm`
-* `volume_type` e.g. `gp2`
+* `release` e.g. `release=xenial`
+* `architecture` defaults to `architecture=x86_64`
+* `root_device_type` defaults to `root_device_type=ebs`
+* `image_type` defaults to `image_type=machine`
+* `hypervisor` defaults to `hypervisor=xen`
+* `virtualization_type` defaults to `virtualization_type=hvm`
+* `volume_type` e.g. `volume_type=gp2`
 * `owner` defaults to official owner for the distro
+* `tag:<name>` e.g. `tag:name=one_word`
 
 ### Example
 
