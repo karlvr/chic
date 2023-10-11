@@ -95,8 +95,6 @@ TAG() {
 }
 
 SSH_USERNAME() {
-	ensureNotStartedImageBuild SSH_USERNAME
-
 	ssh_username="$1"
 	echo "  * SSH username: $ssh_username" >&2
 }
