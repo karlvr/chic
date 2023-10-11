@@ -105,6 +105,31 @@ waitForPort() {
 	set -e
 }
 
+waitForSsh() {
+	# Test that ssh is currently available for our user
+	local attempts=1
+	local delay=5
+
+	set +e
+	ssh -T $ssh_options $ssh_username@$instance_public_ip true
+
+	while [ $? != 0 ]; do
+		if [ $attempts -gt 20 ]; then
+			echo "  * Failed to establish SSH connection" >&2
+			terminate y
+			exit 1
+		fi
+
+		echo "  * Retrying SSH connection in ${delay}s ($attempts attempts)" >&2
+		sleep $delay
+
+		attempts=$((attempts + 1))
+		ssh -T $ssh_options $ssh_username@$instance_public_ip true
+	done
+
+	set -e
+}
+
 ensureStartedImageBuild() {
 	if [ -z "${image_stack_name:-}" ]; then
 		if [ ! -z "${existing_image_stack_name:-}" ]; then
@@ -114,6 +139,7 @@ ensureStartedImageBuild() {
 		fi
 		waitForImageStack
 		waitForPort "$instance_public_ip" 22
+		waitForSsh
 	fi
 }
 

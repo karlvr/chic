@@ -97,6 +97,10 @@ TAG() {
 SSH_USERNAME() {
 	ssh_username="$1"
 	echo "  * SSH username: $ssh_username" >&2
+	
+	if [ -n "${image_stack_name:-}" ]; then
+		waitForSsh
+	fi
 }
 
 ENV() {
