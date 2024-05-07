@@ -45,6 +45,7 @@ the default value for the environment variable.
 The supported distros are:
 
 * `ubuntu`
+* `ubuntu-pro-server`
 
 After the distro name you may include filters to narrow down the image, including:
 

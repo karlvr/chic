@@ -4,6 +4,7 @@ ssh_username=
 environment=
 root_volume_device_name=
 root_volume_size=
+distro=
 
 FROM() {
 	ensureNotStartedImageBuild FROM
@@ -14,7 +15,7 @@ FROM() {
 			echo "  * Source AMI: $ami" >&2
 		else
 			echo "  * Searching for Source AMI: $*" >&2
-			local distro="$1"
+			distro="$1"
 			shift
 			
 			eval "ami=\$(chic_find_image_$distro \"$@\")"

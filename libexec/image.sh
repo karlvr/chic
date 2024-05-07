@@ -140,7 +140,7 @@ chic_find_image() {
 		filters="$filters \"Name=block-device-mapping.volume-type,Values=$volume_type\""
 	fi
 	if [ ! -z "$release" ]; then
-		filters="$filters \"Name=name,Values=ubuntu/images/*$release*\""
+		filters="$filters \"Name=name,Values=$distro/images/*$release*\""
 	fi
 	if [ ! -z "$tag_filters" ]; then
 		filters="$filters $tag_filters"
@@ -155,6 +155,11 @@ chic_find_image() {
 }
 
 chic_find_image_ubuntu() {
+	# Use official Canonical owner id
+	chic_find_image owner=099720109477 "$@"
+}
+
+chic_find_image_ubuntu-pro-server() {
 	# Use official Canonical owner id
 	chic_find_image owner=099720109477 "$@"
 }
