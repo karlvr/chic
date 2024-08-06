@@ -31,6 +31,7 @@ machine, unless you're using a `RUN` command to execute on the remote machine bu
 * `COPY [-o <user:group>] <source> ... <dest>` Copy a file from the local machine to the remote machine. This command can have multiple source arguments, and can be used multiple times. Files and directories are copied owned by `root` and group `root`, or you can use the `-o` switch to specify the user and group.
 * `RUN <command>` Run the given command on the remote machine. This command can be used multiple times, and can also accept its commands on stdin so can be used with heredocs.
 * `MANUAL` run an interactive ssh session with the builder image, so you can poke around.
+* `START` start the remote machine, if it hasn't already been started (the remote machine is automatically started by other commands as needed; use this command to start the machine for use with your own scripting when it hasn't been started by another command).
 
 ### Environment variables
 

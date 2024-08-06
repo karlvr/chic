@@ -218,6 +218,10 @@ COPY() {
 	set -e
 }
 
+START() {
+	ensureStartedImageBuild
+}
+
 RUN() {
 	ensureStartedImageBuild
 
