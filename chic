@@ -42,9 +42,18 @@ date_stamp=$(date +%Y%m%d%H%M%S)
 # Run Chicfile
 echo "* Running Chicfile: $chicfile" >&2
 
+handle_exit() {
+	echo "* Caught exit from Chifile with status $?" >&2
+	terminate
+}
+
+trap handle_exit EXIT
+
 pushd "$base_dir" >/dev/null
 . "$(basename $chicfile)"
 popd >/dev/null
+
+trap - EXIT
 
 # Build image
 buildImage
