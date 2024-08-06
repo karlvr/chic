@@ -11,6 +11,39 @@ buildImageStack() {
 		terminate
 		exit 1
 	fi
+	if [ -z "$vpcid" ]; then
+		local vpcs
+		vpcs=$(aws ec2 describe-vpcs $global_aws_options --output text --query 'Vpcs[].VpcId' --filters Name=state,Values=available Name=is-default,Values=true)
+		if [ -z "$vpcs" ]; then
+			vpcs=$(aws ec2 describe-vpcs $global_aws_options --output text --query 'Vpcs[].VpcId' --filters Name=state,Values=available)
+		fi
+
+		if [ -z "$vpcs" ]; then
+			echo "No VPC found. Set CHIC_VPC_ID or create a VPC" >&2
+			terminate
+			exit 1
+		fi
+
+		vpcid=$(echo "$vpcs" | tr '\t' '\n' | sort -R | head -n 1)
+		echo "  * Determined VPC id: $vpcid" >&2
+	else
+		echo "  * Using VPC id: $vpcid" >&2
+	fi
+	if [ -z "$subnetid" ]; then
+		local subnets
+		subnets=$(aws ec2 describe-subnets $global_aws_options --output text --query 'Subnets[].SubnetId' --filters Name=vpc-id,Values=$vpcid)
+
+		if [ -z "$subnets" ]; then
+			echo "No subnets found in VPC $vpcid. Set CHIC_SUBNET_ID or create a subnet in the VPC" >&2
+			terminate
+			exit 1
+		fi
+
+		subnetid=$(echo "$subnets" | tr '\t' '\n' | sort -R | head -n 1)
+		echo "  * Determined subnet id: $subnetid" >&2
+	else
+		echo "  * Using subnet id: $subnetid" >&2
+	fi
 
 	if [ -z "$root_volume_device_name" ]; then
 		root_volume_device_name=$(aws ec2 describe-images $global_aws_options --image-ids "$ami" --output text --query 'Images[].BlockDeviceMappings[0].DeviceName')
@@ -37,6 +70,8 @@ buildImageStack() {
 		ParameterKey=SSHLocation,ParameterValue="$my_public_ip/32" \
 		ParameterKey=RootVolumeDeviceName,ParameterValue="$root_volume_device_name" \
 		ParameterKey=RootVolumeSize,ParameterValue="$root_volume_size" \
+		ParameterKey=VpcId,ParameterValue="$vpcid" \
+		ParameterKey=SubnetId,ParameterValue="$subnetid" \
 		> /dev/null
 }
 

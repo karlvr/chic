@@ -24,20 +24,23 @@ name=
 instance_type=
 tags=
 noninteractive=
+vpcid="${CHIC_VPC_ID:-}"
+subnetid="${CHIC_SUBNET_ID:-}"
 
 usage() {
+	echo "Chic $CHIC_VERSION" >&2
 	echo "usage: $0 [-a <ami>] [-i <instance type>]" >&2
 	echo "          [-n <output ami name>] [-t <tag key>=<value>]+" >&2
 	echo "          [-p <profile>] [-r <region>]" >&2
-	echo "          [-s <existing image build stack>]" >&2
-	echo "          [-b] <basedir | Chicfile>" >&2
+	echo "          [-v <vpc id>] [-s <subnet id>]" >&2
+	echo "          [-e <existing image build stack>]" >&2
+	echo "          [-b]" >&2
+	echo "          <basedir | Chicfile>" >&2
 	echo >&2
 	echo " -b Non-interactive mode" >&2
-	echo >&2
-	echo "usage: $0 -v" >&2
 }
 
-while getopts ":a:i:n:t:p:r:s:bv" opt; do
+while getopts ":a:i:n:t:p:r:s:bv:" opt; do
 	case $opt in
 		a)
 			ami="$OPTARG"
@@ -59,15 +62,14 @@ while getopts ":a:i:n:t:p:r:s:bv" opt; do
 		r)
 			region="$OPTARG"
 			;;
-		s)
+		e)
 			existing_image_stack_name="$OPTARG"
 			;;
 		b)
 			noninteractive=1
 			;;
 		v)
-			echo "chic $CHIC_VERSION"
-			exit 0
+			vpcid="$OPTARG"
 			;;
     	\?)
 	      	echo "Invalid option: -$OPTARG" >&2

@@ -91,6 +91,7 @@ The following command-line options control chic:
 
 * `-p <profile>` The awscli configuration profile to use to access AWS
 * `-r <region>` The AWS region to use to build the image (defaults to the default region for your awscli profile)
+* `-v <vpc id>` The AWS VPC ID to use to build the image
 * `-b` Non-interactive mode
 
 The following command-line options are supported to override Chicfile settings:
@@ -107,6 +108,8 @@ You can also use the following environment variables to configure Chic:
 
 * `CHIC_PROFILE` The awscli configuration profile to use to access AWS
 * `CHIC_REGION` The AWS region to use to build the image
+* `CHIC_VPC_ID`
+* `CHIC_SUBNET_ID`
 
 ## Configuration file
 
